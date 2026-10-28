@@ -24,5 +24,3 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Existing downloaded error page, not the assignment
-/crawling.md

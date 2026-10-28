@@ -5,7 +5,7 @@ label: m1-crawling
 description: "Scrape the arXiv open repository: discover paper entries, download full-text LaTeX sources for every version, and crawl reference metadata."
 ---
 
-# Objectives
+# Objectivess
 
 In this milestone, students will employ the knowledge about data scraping, also called crawling, obtained from the theoretical lectures to scrape an online repository. This practice is expected to help you convert that knowledge into useful skills about the engineering aspect of your data science journey. However, do not think that this milestone, as well as the others, will cover all the necessary skills you should know before joining realistic projects, so you must continue learning even after the completion of this course!
 
