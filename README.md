@@ -84,5 +84,3 @@ Thay `discovery` bằng phần được giao. Một người khác review trư�
 3. Làm luồng đầy đủ với vài bài, có bài nhiều version và trường hợp thiếu source.
 4. Kiểm tra khả năng chạy tiếp sau khi ngắt.
 5. Chạy toàn bộ trên Colab, thu metrics và dùng kết quả để build báo cáo.
-
-Bản `crawling.md` cũ trong máy là trang lỗi 404 nên được giữ nguyên và bỏ qua trong Git. Dùng nội dung đề chính xác đã được cung cấp trong chat.
