@@ -1,7 +1,23 @@
-"""Member 3: detect source formats and extract only .tex and .bib files.
+"""Extract only .tex and .bib files from a paper source."""
 
-Implement extract_source(source_path, destination). Preserve relative paths and
-file contents. Validate archive paths against traversal before writing files;
-reject links. Keep figure commands inside TeX untouched. Distinguish no-TeX
-sources from corrupt archives or download failures. Record byte counts.
-"""
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional, Union
+
+
+@dataclass
+class ExtractionResult:
+    """Summary of one extraction attempt."""
+
+    status: str
+    files: List[str] = field(default_factory=list)
+    retained_bytes: int = 0
+    error: Optional[str] = None
+
+
+def extract_source(
+    source_path: Union[str, Path],
+    destination: Union[str, Path],
+) -> ExtractionResult:
+    """Extract allowed source files and return the outcome."""
+    raise NotImplementedError("Extraction is not implemented yet")
