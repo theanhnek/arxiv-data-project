@@ -34,6 +34,7 @@ def test_extracts_only_tex_and_bib_and_preserves_bytes(tmp_path):
     result = extract_source(archive, destination)
 
     assert result.status == "success"
+    assert result.input_bytes == archive.stat().st_size
     assert set(result.files) == {"paper/main.tex", "paper/refs.bib"}
     assert result.retained_bytes == len(tex) + len(bib)
     assert (destination / "paper/main.tex").read_bytes() == tex
@@ -49,6 +50,7 @@ def test_plain_tex_source_is_copied_without_modification(tmp_path):
     result = extract_source(source, tmp_path / "source")
 
     assert result.status == "success"
+    assert result.input_bytes == source.stat().st_size
     assert result.files == ["single.tex"]
     assert result.retained_bytes == len(content)
     assert (tmp_path / "source/single.tex").read_bytes() == content

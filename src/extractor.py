@@ -17,10 +17,12 @@ class ExtractionResult:
     """Summary of one source extraction attempt.
 
     ``files`` contains paths relative to the destination. ``retained_bytes``
-    counts the uncompressed bytes written for those files.
+    counts the uncompressed bytes written for those files. ``input_bytes`` is
+    the size of the source file presented to the extractor.
     """
 
     status: str
+    input_bytes: int = 0
     files: List[str] = field(default_factory=list)
     retained_bytes: int = 0
     error: Optional[str] = None
@@ -240,17 +242,28 @@ def extract_source(source_path: PathInput, destination: PathInput) -> Extraction
     """
     source = Path(source_path)
     target = Path(destination)
+    try:
+        input_bytes = source.stat().st_size
+    except OSError:
+        input_bytes = 0
 
     source_format = detect_source_format(source)
     if source_format in ("source_missing", "source_unreadable"):
-        return ExtractionResult(status=source_format, error=str(source))
+        return ExtractionResult(
+            status=source_format, input_bytes=input_bytes, error=str(source)
+        )
     if source_format == "unsupported_format":
         return ExtractionResult(
             status="unsupported_format",
+            input_bytes=input_bytes,
             error="Input is neither a readable tar archive nor a plain .tex/.bib file",
         )
     if source_format == "corrupt_archive":
-        return ExtractionResult(status="corrupt_archive", error="Archive signature found but it cannot be read")
+        return ExtractionResult(
+            status="corrupt_archive",
+            input_bytes=input_bytes,
+            error="Archive signature found but it cannot be read",
+        )
 
     try:
         target.mkdir(parents=True, exist_ok=True)
@@ -265,12 +278,19 @@ def extract_source(source_path: PathInput, destination: PathInput) -> Extraction
 
         return ExtractionResult(
             status="success" if has_tex else "no_tex_source",
+            input_bytes=input_bytes,
             files=files,
             retained_bytes=retained_bytes,
         )
     except _UnsafeArchiveError as exc:
-        return ExtractionResult(status="unsafe_archive", error=str(exc))
+        return ExtractionResult(
+            status="unsafe_archive", input_bytes=input_bytes, error=str(exc)
+        )
     except (tarfile.TarError, EOFError) as exc:
-        return ExtractionResult(status="corrupt_archive", error=str(exc))
+        return ExtractionResult(
+            status="corrupt_archive", input_bytes=input_bytes, error=str(exc)
+        )
     except OSError as exc:
-        return ExtractionResult(status="extraction_error", error=str(exc))
+        return ExtractionResult(
+            status="extraction_error", input_bytes=input_bytes, error=str(exc)
+        )
