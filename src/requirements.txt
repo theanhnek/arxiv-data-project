@@ -1,0 +1,5 @@
+# Starting dependencies. Pin the versions after the team validates the environment.
+requests
+psutil
+python-dotenv
+pytest
