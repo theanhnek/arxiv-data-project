@@ -10,3 +10,4 @@ class CrawlConfig:
     arxiv_delay_seconds: float = 3.0
     request_timeout_seconds: float = 60.0
     max_attempts: int = 3
+    user_agent: str = "Lab1ArxivCrawler/0.1"

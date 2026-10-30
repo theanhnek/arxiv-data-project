@@ -2,7 +2,28 @@
 
 Repo code chung cho các milestone. Báo cáo Jupyter Book nằm ở một repo public khác do nhóm tạo riêng.
 
-**Trạng thái:** mới có khung dự án và lệnh tạo thư mục dữ liệu. Các module crawling chưa được triển khai. Chưa tải dữ liệu hoặc gọi API.
+**Trạng thái:** phần discovery của thành viên 1 đã triển khai: đọc ID, resolve metadata, enumerate mọi version và lưu snapshot để resume. Lệnh CLI chưa nối downloader, extraction hoặc references thành pipeline đầy đủ.
+
+## Chạy discovery (thành viên 1)
+
+Tạo file `data/assigned_ids.txt` theo danh sách giảng viên giao, mỗi dòng một ID. Hỗ trợ ID cũ như `hep-th/9901001`, suffix version, dòng trống và comment bắt đầu bằng `#`. Không tự mở rộng một khoảng số khi chưa xác nhận quy tắc từ giảng viên.
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --resume
+```
+
+Kết quả: `data/state/discovery.json`; lỗi input và ID trùng: `data/state/input_validation.json`. Mã thoát 1 nghĩa là còn input không hợp lệ hoặc bài resolve lỗi; kết quả các bài khác vẫn được lưu. `--resume` tái sử dụng snapshot thành công và thử lại bài lỗi; bỏ `--resume` để kiểm tra revision mới.
+
+`papers[].versions` là danh sách công việc cho downloader. Discovery chỉ ghi trạng thái pending, không tuyên bố đã tải source. `latest_updated_date` là ngày cập nhật mới nhất; `revised_dates` chưa đủ lịch sử nếu `revision_dates_complete=false`. Phần tích hợp cần bổ sung lịch sử ngày revision từ nguồn thích hợp; không suy đoán ngày còn thiếu.
+
+Đặc tả bàn giao: [docs/discovery.md](docs/discovery.md).
+
+Kiểm tra offline (không gọi API):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q --basetemp data/test-run
+```
 
 ## 1. Cài môi trường
 
