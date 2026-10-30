@@ -1,5 +1,78 @@
 # Bàn giao phần thành viên 1
 
+## Hướng dẫn chạy cho thành viên 2
+
+Chạy các lệnh PowerShell dưới đây từ thư mục gốc repository, không chạy từ bên trong `src/`.
+
+### 1. Chuẩn bị môi trường và danh sách ID
+
+Nếu chưa cài môi trường:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r src/requirements.txt
+Copy-Item .env.example .env
+```
+
+Chỉ copy `.env.example` khi chưa có `.env` để tránh ghi đè cấu hình cá nhân. Điền thông tin liên hệ trong `ARXIV_USER_AGENT` của `.env`.
+
+Tạo thư mục dữ liệu:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --init --output data
+```
+
+Tạo file `data/assigned_ids.txt` theo danh sách được giao, mỗi dòng một ID. Nếu chỉ muốn chạy thử và file chưa tồn tại, có thể tạo mẫu:
+
+```powershell
+@'
+1706.03762
+1810.04805
+'@ | Set-Content -LiteralPath data/assigned_ids.txt -Encoding utf8
+```
+
+Lệnh tạo mẫu sẽ thay nội dung file nếu đã tồn tại. Hai ID trên chỉ để thử, không phải danh sách phân công chính thức. `data/` không được đưa lên GitHub nên mỗi thành viên cần tự chuẩn bị input và chạy discovery trên máy mình.
+
+### 2. Chạy discovery
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --output data
+```
+
+Nếu bị ngắt hoặc có bài lỗi, chạy tiếp bằng:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --output data --resume
+```
+
+Kiểm tra `summary`: `resolved` là số bài lấy metadata thành công, `failed` là số bài lỗi, `expected_versions` là tổng số version cần tải. Với resume, `cache_hits` cho biết số bài được dùng lại từ snapshot. Muốn tìm revision mới, chạy lại không có `--resume`.
+
+### 3. Dùng đầu ra để triển khai downloader
+
+Đầu ra chính là `data/state/discovery.json`. File `data/state/input_validation.json` ghi ID sai định dạng và ID trùng. Nếu discovery báo lỗi, kiểm tra các file này; không coi bài lỗi là bài không có source.
+
+Ví dụ đọc danh sách công việc trong Python, chạy từ thư mục gốc repo:
+
+```python
+import json
+from pathlib import Path
+
+report = json.loads(
+    Path("data/state/discovery.json").read_text(encoding="utf-8")
+)
+
+for paper in report["papers"]:
+    if paper["status"] != "resolved":
+        continue
+    for version in paper["versions"]:
+        version_id = version["version_id"]
+        source_url = version["source_url"]
+        print(version_id, source_url)
+        # Nối hàm download của thành viên 2 tại đây khi đã triển khai.
+```
+
+Đoạn trên chỉ đọc/in công việc, chưa tải file. Downloader cần tải từng `source_url`, ghi kết quả và lỗi riêng; không sửa snapshot discovery thành nơi lưu tiến độ download. Phối hợp pacing arXiv giữa discovery và download khi ghép pipeline.
+
 ## Giao diện đã triển khai
 
 - `load_ids(path)` trả `ids`, `invalid`, `duplicates`. Input TXT UTF-8 một ID/dòng; không hỗ trợ CSV hoặc khoảng ID tự suy diễn.

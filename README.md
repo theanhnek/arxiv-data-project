@@ -1,107 +1,148 @@
-# arXiv Data Project — Milestone 1
+# arXiv Data Project
 
-Repo code chung cho các milestone. Báo cáo Jupyter Book nằm ở một repo public khác do nhóm tạo riêng.
+Thu thập và xử lý dữ liệu bài báo arXiv cho đồ án Nhập môn Khoa học Dữ liệu. Dự án hướng đến xây dựng corpus LaTeX theo từng phiên bản, chuẩn hóa cấu trúc tài liệu và phát triển hệ thống reference matching qua ba milestone.
 
-**Trạng thái:** phần discovery của thành viên 1 đã triển khai: đọc ID, resolve metadata, enumerate mọi version và lưu snapshot để resume. Lệnh CLI chưa nối downloader, extraction hoặc references thành pipeline đầy đủ.
+## Phạm vi triển khai
 
-## Chạy discovery (thành viên 1)
+Milestone 1 thu thập metadata, source LaTeX và reference metadata của các bài báo được phân công. Corpus này là đầu vào cho bước parsing ở Milestone 2 và reference matching ở Milestone 3.
 
-Tạo file `data/assigned_ids.txt` theo danh sách giảng viên giao, mỗi dòng một ID. Hỗ trợ ID cũ như `hep-th/9901001`, suffix version, dòng trống và comment bắt đầu bằng `#`. Không tự mở rộng một khoảng số khi chưa xác nhận quy tắc từ giảng viên.
+Hiện CLI hỗ trợ đọc danh sách ID, lấy metadata từ arXiv, xác định toàn bộ phiên bản và lưu kết quả discovery để tiếp tục khi bị ngắt. Các bước download, extraction, references và đo hiệu năng chưa được tích hợp thành một lệnh chạy toàn bộ pipeline.
 
-```powershell
-.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt
-.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --resume
-```
+## Yêu cầu môi trường
 
-Kết quả: `data/state/discovery.json`; lỗi input và ID trùng: `data/state/input_validation.json`. Mã thoát 1 nghĩa là còn input không hợp lệ hoặc bài resolve lỗi; kết quả các bài khác vẫn được lưu. `--resume` tái sử dụng snapshot thành công và thử lại bài lỗi; bỏ `--resume` để kiểm tra revision mới.
+- Python 3.11.
+- Kết nối Internet để truy cập arXiv API.
+- Các thư viện trong `src/requirements.txt`.
 
-`papers[].versions` là danh sách công việc cho downloader. Discovery chỉ ghi trạng thái pending, không tuyên bố đã tải source. `latest_updated_date` là ngày cập nhật mới nhất; `revised_dates` chưa đủ lịch sử nếu `revision_dates_complete=false`. Phần tích hợp cần bổ sung lịch sử ngày revision từ nguồn thích hợp; không suy đoán ngày còn thiếu.
+Các lệnh dưới đây sử dụng PowerShell trên Windows và được chạy từ thư mục gốc của repository.
 
-Đặc tả bàn giao: [docs/discovery.md](docs/discovery.md).
-
-Kiểm tra offline (không gọi API):
+## Cài đặt
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q --basetemp data/test-run
-```
-
-## 1. Cài môi trường
-
-Đề xuất dùng Python 3.11. Mở PowerShell tại thư mục repo:
-
-```powershell
+git clone https://github.com/theanhnek/arxiv-data-project.git
+cd arxiv-data-project
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r src/requirements.txt
 Copy-Item .env.example .env
 ```
 
-Sửa thông tin liên hệ trong `.env`; thêm Semantic Scholar API key nếu có. Khi triển khai HTTP client, thành viên phụ trách phải đọc các biến này; khung hiện tại chưa dùng chúng.
+Trong `.env`, đặt `ARXIV_USER_AGENT` với tên ứng dụng và địa chỉ liên hệ của nhóm:
 
-Không cần activate môi trường: có thể gọi trực tiếp Python trong `.venv` như các lệnh bên dưới.
+```dotenv
+ARXIV_USER_AGENT=Lab1ArxivCrawler/0.1 (contact: your-email@example.com)
+```
 
-## 2. Kiểm tra khung dự án
+CLI discovery đọc biến này khi khởi động. `SEMANTIC_SCHOLAR_API_KEY` được dành cho module references; discovery không sử dụng biến đó. File `.env` không được đưa vào Git.
 
-Chạy từ thư mục gốc, không chạy từ bên trong `src`:
+## Sử dụng
+
+### Khởi tạo thư mục dữ liệu
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.main --help
 .\.venv\Scripts\python.exe -m src.main --init --output data
 ```
 
-Lệnh `--init` chỉ tạo `data/corpus`, `data/state`, `data/metrics`, `data/tmp`. Pipeline tải bài sẽ được nhóm nối vào `src/main.py` sau.
+### Chuẩn bị danh sách bài báo
 
-## 3. Cấu trúc và phân công
+Tạo `data/assigned_ids.txt` dưới dạng UTF-8, mỗi dòng một arXiv ID. Ví dụ thử nghiệm:
 
-`src` là thư mục chứa mã nguồn Python. Mỗi người làm module được giao rồi ghép qua `main.py`.
-
-- Người 1: `discovery.py`, điều phối `main.py` và schema chung.
-- Người 2: `downloader.py`, pacing, retry và resume download.
-- Người 3: `extractor.py`, nhận diện định dạng, giải nén an toàn, giữ `.tex`/`.bib`.
-- Người 4: `references.py`, phối hợp `storage.py` để lưu và chuẩn hóa metadata.
-- Người 5: `metrics.py`, kiểm tra đầu ra, benchmark Colab và repo báo cáo riêng.
-- Chung: `config.py` chứa cấu hình; `requirements.txt` chứa dependencies. Mỗi người bổ sung dependency mình dùng và cùng cố định phiên bản sau khi kiểm tra.
-
-## 4. Những yêu cầu không được bỏ sót
-
-- Nhận danh sách ID được giao và thu thập tất cả phiên bản `v1..vN`.
-- Tải từng phiên bản từ mirror `export.arxiv.org`; dùng User-Agent có thông tin liên hệ và pacing theo đề.
-- Chỉ trích xuất `.tex` và `.bib`, giữ cấu trúc đường dẫn tương đối và nội dung gốc. Không xóa lệnh hình ảnh trong TeX.
-- Không có TeX vẫn giữ record của phiên bản đó. Phân biệt `no_tex_source` và `failed`.
-- Giữ toàn bộ references nội bộ; khi xuất bảng cuối chỉ đưa references có arXiv ID vào bảng `references`.
-- Không giả định Semantic Scholar phân biệt references theo version. Ghi lại nguồn và giới hạn của dữ liệu.
-- Đo runtime, RAM và disk trong toàn pipeline. Benchmark cuối trên Colab CPU-only.
-- Không commit corpus, archive, credentials, log hoặc output sinh ra vào repo code.
-
-## 5. Hợp đồng dữ liệu cần chốt trước khi code
-
-Nhóm cần thống nhất schema chi tiết trước khi triển khai các module:
-
-- Paper: `arxiv_id` gốc, title, authors, submission date, revised dates, venue và danh sách versions.
-- Version: ID có suffix version, trạng thái, đường dẫn source, lỗi nếu có và metrics.
-- Reference: metadata thô từ API và các trường chuẩn hóa; giá trị không biết phải thể hiện là thiếu, không tự suy đoán.
-- State: trạng thái riêng cho download, extraction và references để chạy lại phần thất bại mà không mất phần đã thành công.
-
-Hai bảng cuối dự án theo đề:
-
-- `papers`: `arxiv_id`, `title`, `authors`, `submission_date`, `revised_dates`, `venue`.
-- `references`: `arxiv_id` (bài trích dẫn), `ref_arxiv_id`, `ref_title`, `ref_authors`, `ref_submission_date`, `ref_s2_id`.
-
-## 6. Làm việc với Git
-
-Mỗi thành viên clone repo, tạo nhánh riêng từ `main` và mở pull request khi một phần nhỏ đã chạy được:
-
-```powershell
-git switch main
-git pull
-git switch -c feat/discovery
+```text
+# Sample IDs; replace with the assigned list before the full crawl.
+1706.03762
+1810.04805
 ```
 
-Thay `discovery` bằng phần được giao. Một người khác review trước khi merge. Không đưa API key hoặc dữ liệu crawl vào commit.
+Bộ đọc hỗ trợ ID mới, ID cũ như `hep-th/9901001`, suffix phiên bản như `1706.03762v2`, dòng trống và comment bắt đầu bằng `#`. ID có suffix được quy về publication để tìm tất cả phiên bản. ID trùng được loại bỏ; dòng sai định dạng được ghi lại. Đầu vào hiện là danh sách ID cụ thể, chưa hỗ trợ CSV, URL hoặc tự mở rộng khoảng ID.
 
-## 7. Mốc đầu tiên
+### Chạy discovery
 
-1. Điền tên người phụ trách từng module và lấy danh sách ID từ giảng viên.
-2. Chốt schema, giao diện hàm và cách ghi metrics.
-3. Làm luồng đầy đủ với vài bài, có bài nhiều version và trường hợp thiếu source.
-4. Kiểm tra khả năng chạy tiếp sau khi ngắt.
-5. Chạy toàn bộ trên Colab, thu metrics và dùng kết quả để build báo cáo.
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --output data
+```
+
+Discovery lấy metadata và tạo danh sách phiên bản từ `v1` đến phiên bản mới nhất. Lệnh này chưa tải source `.tex` hoặc `.bib`.
+
+Để dùng lại kết quả thành công đã lưu và thử lại các bài lỗi:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --output data --resume
+```
+
+Resume sử dụng snapshot cũ. Bỏ `--resume` khi cần cập nhật metadata hoặc kiểm tra phiên bản mới.
+
+Có thể cấu hình timeout mỗi request và số lần thử tối đa:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --timeout 60 --attempts 3
+```
+
+Xem toàn bộ tùy chọn:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --help
+```
+
+### Đọc kết quả
+
+- `data/state/discovery.json`: metadata, trạng thái từng bài, danh sách phiên bản và thống kê lần chạy.
+- `data/state/input_validation.json`: danh sách ID hợp lệ, ID trùng và các dòng không hợp lệ.
+
+Trong `discovery.json`, mỗi bài resolve thành công có `status: resolved`. Trường `papers[].versions[]` cung cấp `version_id` và `source_url` cho bước download. Các trạng thái download/extraction ban đầu là `pending`.
+
+Mã thoát `0` cho biết discovery hoàn tất với input hợp lệ và không có bài resolve lỗi. Mã `1` cho biết còn input không hợp lệ hoặc có bài thất bại; kết quả của các bài thành công vẫn được lưu. Lỗi tham số hoặc không có ID hợp lệ dùng mã `2`.
+
+## Cấu trúc repository
+
+```text
+arxiv-data-project/
+├── src/
+│   ├── main.py              # CLI
+│   ├── config.py            # Cấu hình dùng chung
+│   ├── discovery.py         # Resolve metadata và liệt kê phiên bản
+│   ├── downloader.py        # Module tải source
+│   ├── extractor.py         # Module trích xuất source
+│   ├── references.py        # Module reference metadata
+│   ├── storage.py           # Module lưu dữ liệu
+│   ├── metrics.py           # Module đo hiệu năng
+│   └── requirements.txt
+├── tests/                   # Kiểm tra tự động
+├── docs/
+│   └── discovery.md         # Giao diện và schema discovery
+├── .env.example
+├── .gitignore
+├── plan.md                  # Kế hoạch triển khai
+└── README.md
+```
+
+Thư mục `data/` được tạo cục bộ khi chạy và được loại khỏi Git, cùng với môi trường ảo, thông tin xác thực và output sinh ra.
+
+## Kiểm tra
+
+Chạy các kiểm tra discovery offline, không gửi request đến arXiv:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py -v --basetemp data/test-discovery
+```
+
+Các trường hợp được kiểm tra gồm validation và loại trùng ID, liệt kê phiên bản, response không khớp ID và phục hồi sau lỗi từng phần. Test offline không thay thế việc xác nhận kết nối API thật.
+
+## Schema và giới hạn hiện tại
+
+Đặc tả đầu ra và giao diện tích hợp được mô tả trong [docs/discovery.md](docs/discovery.md).
+
+- Metadata được lấy ở mức publication theo phiên bản mới nhất, chưa phải metadata riêng cho mỗi revision.
+- `latest_updated_date` là thời điểm cập nhật mới nhất. `revised_dates` chưa có lịch sử đầy đủ khi `revision_dates_complete` là `false`.
+- `venue` hiện lấy từ journal reference của arXiv và chưa được chuẩn hóa thành tên venue riêng.
+- Discovery sử dụng request tuần tự với khoảng cách ít nhất 3 giây. Khi tích hợp downloader cần phối hợp pacing giữa các request arXiv.
+
+## Báo cáo và dữ liệu
+
+Báo cáo Milestone 1–2 được xây dựng bằng Jupyter Book trong một repository public riêng và triển khai trên GitHub Pages theo yêu cầu đồ án. Đường dẫn báo cáo sẽ được bổ sung sau khi triển khai.
+
+Corpus được nhóm lưu để sử dụng cho các milestone sau. Milestone 1 nộp link code và báo cáo; dataset hoàn chỉnh được xuất bản trên Hugging Face ở giai đoạn cuối dự án.
+
+## Tài liệu tham khảo
+
+- [arXiv API User Manual](https://info.arxiv.org/help/api/user-manual.html)
+- [arXiv API Terms of Use](https://info.arxiv.org/help/api/tou.html)
+- [Project Problem Statements](https://hcmus-cs-ta.github.io/lab-book/intro-ds/statement/)
