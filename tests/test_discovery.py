@@ -5,7 +5,13 @@ from unittest.mock import Mock
 import pytest
 
 from src.config import CrawlConfig
-from src.discovery import discover_papers, load_ids, normalize_id, parse_paper
+from src.discovery import (
+    discover_assigned_range,
+    discover_papers,
+    load_ids,
+    normalize_id,
+    parse_paper,
+)
 
 
 def feed(base="2310.12345", latest=3):
@@ -22,6 +28,47 @@ def test_input_validation(tmp_path):
     result = load_ids(path)
     assert result["ids"] == ["2310.12345", "hep-th/9901001"]
     assert len(result["duplicates"]) == len(result["invalid"]) == 1
+
+
+def test_load_ids_from_assigned_range_table(tmp_path):
+    path = tmp_path / "ranges.tsv"
+    path.write_text(
+        "2025-10\t14401\t2025-10\t19400\n"
+        "2025-10\t9401\t2025-10\t14400\n"
+        "2025-10\t4401\t2025-10\t9400\n"
+        "2025-09\t26047\t2025-10\t4400\n"
+        "2025-09\t11047\t2025-09\t16046\n",
+        encoding="utf-8",
+    )
+    m2 = load_ids(path, member_index=2)
+    assert len(m2["ids"]) == 5000
+    assert m2["ids"][0] == "2510.09401"
+    assert m2["ids"][-1] == "2510.14400"
+    assert m2["invalid"] == []
+
+    m4 = load_ids(path, member_index=4, expected_total=5000)
+    assert len(m4["ids"]) == 5000
+    assert m4["ids"][0] == "2509.26047"
+    assert m4["ids"][599] == "2509.26646"
+    assert m4["ids"][600] == "2510.00001"
+    assert m4["ids"][-1] == "2510.04400"
+
+
+def test_discover_assigned_range(tmp_path):
+    client = Mock()
+    client.fetch.side_effect = [
+        feed("2510.09401", 2),
+        feed("2510.09402", 1),
+    ]
+    config = CrawlConfig(output_dir=tmp_path)
+    result = discover_assigned_range(
+        "2025-10", 9401, "2025-10", 9402, config, client=client
+    )
+    assert result["summary"]["assigned_unique_ids"] == 2
+    assert result["summary"]["resolved"] == 2
+    assert result["summary"]["expected_versions"] == 3
+    assert (tmp_path / "assigned_ids.txt").is_file()
+    assert (tmp_path / "state" / "discovery.json").is_file()
 
 
 def test_versions_and_missing_revision_dates():
