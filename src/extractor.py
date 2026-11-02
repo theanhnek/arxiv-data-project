@@ -17,8 +17,9 @@ class ExtractionResult:
     """Summary of one source extraction attempt.
 
     ``files`` contains paths relative to the destination. ``retained_bytes``
-    counts the uncompressed bytes written for those files. ``input_bytes`` is
-    the size of the source file presented to the extractor.
+    counts bytes written for allowed source files. ``input_bytes`` is the
+    downloaded input size, while ``archive_uncompressed_bytes`` sums regular
+    archive members before filtering.
     """
 
     status: str
@@ -26,6 +27,7 @@ class ExtractionResult:
     files: List[str] = field(default_factory=list)
     retained_bytes: int = 0
     error: Optional[str] = None
+    archive_uncompressed_bytes: int = 0
 
 
 class _UnsafeArchiveError(Exception):
@@ -160,10 +162,11 @@ def _install_staged_files(staging: Path, destination: Path, files: List[str]) ->
 
 def _extract_tar(
     source_path: Path, staging: Path
-) -> tuple[List[str], int, bool]:
-    """Extract allowed regular files from a validated tar archive."""
+) -> tuple[List[str], int, int, bool]:
+    """Stage allowed files and measure every regular archive member."""
     extracted: List[str] = []
     retained_bytes = 0
+    archive_uncompressed_bytes = 0
     seen = set()
 
     with tarfile.open(source_path, mode="r:*") as archive:
@@ -179,6 +182,7 @@ def _extract_tar(
                 continue
             if not member.isfile():
                 continue
+            archive_uncompressed_bytes += member.size
 
             if Path(parts[-1]).suffix.lower() not in (".tex", ".bib"):
                 continue
@@ -211,25 +215,28 @@ def _extract_tar(
             extracted.append(relative_name)
             retained_bytes += copied
 
-    return extracted, retained_bytes, any(
-        PurePosixPath(name).suffix.lower() == ".tex" for name in extracted
+    return (
+        extracted,
+        retained_bytes,
+        archive_uncompressed_bytes,
+        any(PurePosixPath(name).suffix.lower() == ".tex" for name in extracted),
     )
 
 
 def _extract_plain_source(
     source_path: Path, staging: Path
-) -> tuple[List[str], int, bool]:
+) -> tuple[List[str], int, int, bool]:
     """Stage one plain .tex or .bib source file without altering its bytes."""
     name = source_path.name
     if Path(name).suffix.lower() not in (".tex", ".bib"):
-        return [], 0, False
+        return [], 0, 0, False
 
     staged_file = staging / name
     with source_path.open("rb") as source, staged_file.open("xb") as output:
         retained_bytes = _copy_stream(source, output)
 
     has_tex = Path(name).suffix.lower() == ".tex"
-    return [name], retained_bytes, has_tex
+    return [name], retained_bytes, 0, has_tex
 
 
 def extract_source(source_path: PathInput, destination: PathInput) -> ExtractionResult:
@@ -270,9 +277,19 @@ def extract_source(source_path: PathInput, destination: PathInput) -> Extraction
         with tempfile.TemporaryDirectory(prefix=".extract-", dir=target) as temp_name:
             staging = Path(temp_name)
             if source_format == "tar_archive":
-                files, retained_bytes, has_tex = _extract_tar(source, staging)
+                (
+                    files,
+                    retained_bytes,
+                    archive_uncompressed_bytes,
+                    has_tex,
+                ) = _extract_tar(source, staging)
             else:
-                files, retained_bytes, has_tex = _extract_plain_source(source, staging)
+                (
+                    files,
+                    retained_bytes,
+                    archive_uncompressed_bytes,
+                    has_tex,
+                ) = _extract_plain_source(source, staging)
 
             _install_staged_files(staging, target, files)
 
@@ -281,6 +298,7 @@ def extract_source(source_path: PathInput, destination: PathInput) -> Extraction
             input_bytes=input_bytes,
             files=files,
             retained_bytes=retained_bytes,
+            archive_uncompressed_bytes=archive_uncompressed_bytes,
         )
     except _UnsafeArchiveError as exc:
         return ExtractionResult(
