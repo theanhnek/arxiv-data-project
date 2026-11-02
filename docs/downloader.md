@@ -105,7 +105,7 @@ finally:
 - `safe_paper_dirname(arxiv_id) -> str`: chuyển ID sang tên thư mục an toàn (`"hep-th/9901001"` $\rightarrow$ `"hep-th_9901001"`).
 - `build_source_url(version_id) -> str`: tạo URL tải từ mirror chính thức `https://export.arxiv.org/src/{version_id}`.
 - `download_source(version_id, config, *, resume=False, client=None, source_url=None) -> DownloadResult`:
-  - Tải một version (`{base}v{n}`), stream theo chunk 64 KB xuống file tạm `.part` trong `data/tmp/downloads/{safe_id}/`, tính `SHA-256` trên luồng, kiểm tra định dạng thực tế (`.tar.gz`, `.gz`, `.tar`, `.zip`, `.tex`, `.bib`, `.pdf`) để gắn đuôi mở rộng chuẩn cho `src/extractor.py`, rồi đổi tên nguyên tử sang `v{n}.{ext}`.
+  - Tải một version (`{base}v{n}`), stream theo chunk 64 KB xuống file tạm `.part` trong `data/tmp/downloads/{safe_id}/`, tính `SHA-256` trên luồng, kiểm tra định dạng thực tế (`.tar.gz`, `.gz`, `.tar`, `.tex`, `.bib`, `.pdf`) để gắn đuôi mở rộng chuẩn cho `src/extractor.py`, rồi đổi tên nguyên tử sang `v{n}.{ext}`.
   - Lưu trạng thái từng version tại `data/state/downloads/{safe_id}/v{n}.json`.
 - `download_discovered_sources(config, *, discovery_path=None, resume=False, client=None) -> dict`:
   - Đọc `data/state/discovery.json` (không sửa snapshot của Thành viên 1), tải tuần tự mọi version của các bài `status == "resolved"`, và ghi báo cáo tổng hợp vào `data/state/downloads.json`.
