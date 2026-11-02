@@ -4,11 +4,12 @@ Thu thập và xử lý dữ liệu bài báo arXiv cho đồ án Nhập môn Kh
 
 ## Phạm vi triển khai
 
-Milestone 1 thu thập metadata, source LaTeX và reference metadata của các bài báo được phân công. Corpus này là đầu vào cho bước parsing ở Milestone 2 và reference matching ở Milestone 3
+Milestone 1 thu thập metadata, source LaTeX và reference metadata của các bài báo được phân công. Corpus này là đầu vào cho bước parsing ở Milestone 2 và reference matching ở Milestone 3.
 
 Hiện CLI hỗ trợ:
 1. **Bước 1 — Discovery (`--discover`)**: Mở rộng khoảng phân công (`start_month start_id end_month end_id`) hoặc đọc danh sách arXiv ID, lấy metadata từ arXiv API, xác định toàn bộ phiên bản (`v1..vN`) và lưu vào `data/state/discovery.json`
 2. **Bước 2 — Download (`--download` / `src.downloader`)**: Tải tuần tự các gói source của mọi phiên bản đã được Discovery identify từ mirror `https://export.arxiv.org/src/{version_id}`, kiểm tra toàn vẹn `SHA-256` và lưu trạng thái vào `data/state/downloads.json`
+3. **Bước 3 — Extraction (`--extract` / `src.extractor`)**: Trích xuất an toàn các file `.tex` và `.bib` từ các gói source đã tải, loại bỏ hoàn toàn hình ảnh và file binary, bảo toàn cấu trúc thư mục và bytes nội dung, lưu trạng thái vào `data/state/extractions.json`
 
 ## Yêu cầu môi trường
 
@@ -96,10 +97,32 @@ Hoặc gọi trực tiếp module `src.downloader`:
 .\.venv\Scripts\python.exe -m src.downloader --output data --resume
 ```
 
-Có thể gộp tuần tự Bước 1 (`--discover`) rồi Bước 2 (`--download`) trong một lệnh và cấu hình `--timeout`, `--attempts`:
+### 5. Bước 3 — Chạy Extraction (Trích xuất TeX/BibTeX & loại bỏ hình ảnh)
+
+Sau khi đã có `data/state/downloads.json`, giải nén và lọc chỉ giữ lại file `.tex` và `.bib` vào thư mục `source/` của từng version:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.main --discover --download --range 2025-10 9401 2025-10 14400 --output data --resume --timeout 60 --attempts 3
+.\.venv\Scripts\python.exe -m src.main --extract --output data --resume
+```
+
+Hoặc gọi trực tiếp module `src.extractor`:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.extractor --output data --resume
+```
+
+### 6. Chạy gộp các bước trong một lệnh
+
+Có thể gộp tuần tự cả 3 bước (Discovery $\rightarrow$ Download $\rightarrow$ Extract) trong một lệnh duy nhất:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --download --extract --range 2025-10 9401 2025-10 14400 --output data --resume --timeout 60 --attempts 3
+```
+
+Hoặc gộp Bước 2 (Download) và Bước 3 (Extract):
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --download --extract --output data --resume
 ```
 
 Xem toàn bộ tùy chọn:
@@ -107,6 +130,7 @@ Xem toàn bộ tùy chọn:
 ```powershell
 .\.venv\Scripts\python.exe -m src.main --help
 .\.venv\Scripts\python.exe -m src.downloader --help
+.\.venv\Scripts\python.exe -m src.extractor --help
 ```
 
 ### Đọc kết quả
@@ -114,13 +138,15 @@ Xem toàn bộ tùy chọn:
 - `data/state/input_validation.json`: danh sách ID hợp lệ, ID trùng và các dòng không hợp lệ.
 - `data/state/discovery.json`: metadata, trạng thái từng bài, danh sách phiên bản (`v1..vN`) và thống kê discovery.
 - `data/state/downloads.json`: kết quả tải từng version (`downloaded`, `not_found`, `invalid_response`, `failed`), đường dẫn file nguồn, kích thước byte, mã băm `SHA-256` và thống kê download.
+- `data/state/extractions.json`: kết quả giải nén từng version (`success`, `no_tex_source`, `skipped_not_downloaded`, `failed`), danh sách file `.tex`/`.bib`, dung lượng byte giữ lại (`retained_bytes`), tổng dung lượng uncompressed archive (`archive_uncompressed_bytes`) và thống kê extraction.
+- `data/corpus/<paper_id>/<vN>/source/`: thư mục chứa các file mã nguồn `.tex` và `.bib` của từng phiên bản sau khi đã lọc bỏ hoàn toàn các file ảnh và file binary.
 
 ## Cấu trúc repository
 
 ```text
 arxiv-data-project/
 ├── src/
-│   ├── main.py              # CLI (init, discover trước -> download sau)
+│   ├── main.py              # CLI (init, discover -> download -> extract)
 │   ├── config.py            # Cấu hình dùng chung
 │   ├── discovery.py         # Mở rộng khoảng ID, resolve metadata & liệt kê phiên bản
 │   ├── downloader.py        # Tải versioned sources từ state/discovery.json
@@ -132,7 +158,8 @@ arxiv-data-project/
 ├── tests/                   # Kiểm tra tự động (offline)
 ├── docs/
 │   ├── discovery.md         # Giao diện, schema và hướng dẫn chạy Discovery (Thành viên 1)
-│   └── downloader.md        # Giao diện, schema và hướng dẫn chạy Downloader (Thành viên 2)
+│   ├── downloader.md        # Giao diện, schema và hướng dẫn chạy Downloader (Thành viên 2)
+│   └── extractor.md         # Giao diện, schema và hướng dẫn chạy Extractor (Thành viên 3)
 ├── .env.example
 ├── .gitignore
 ├── plan.md                  # Kế hoạch triển khai
@@ -151,12 +178,13 @@ Chạy toàn bộ các kiểm tra tự động offline (không gửi request th�
 
 ## Schema và giới hạn hiện tại
 
-Đặc tả đầu ra và giao diện tích hợp được mô tả chi tiết trong [docs/discovery.md](docs/discovery.md) và [docs/downloader.md](docs/downloader.md).
+Đặc tả đầu ra và giao diện tích hợp được mô tả chi tiết trong [docs/discovery.md](docs/discovery.md), [docs/downloader.md](docs/downloader.md), và [docs/extractor.md](docs/extractor.md).
 
 - Metadata được lấy ở mức publication theo phiên bản mới nhất, chưa phải metadata riêng cho mỗi revision.
 - `latest_updated_date` là thời điểm cập nhật mới nhất. `revised_dates` chưa có lịch sử đầy đủ khi `revision_dates_complete` là `false`.
 - `venue` hiện lấy từ journal reference của arXiv và chưa được chuẩn hóa thành tên venue riêng.
 - Discovery và Downloader sử dụng chung cơ chế request tuần tự với khoảng cách ít nhất 3 giây (`ArxivClient`).
+- Quá trình Extraction lọc bỏ tất cả file không có đuôi `.tex` hoặc `.bib` (như file ảnh `.png`, `.jpg`, `.pdf`, `.eps`), giữ nguyên cấu trúc thư mục con và bảo toàn từng byte của file nguồn.
 
 ## Báo cáo và dữ liệu
 

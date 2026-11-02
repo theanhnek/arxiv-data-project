@@ -781,10 +781,14 @@ def download_discovered_sources(
         owned_client = True
 
     try:
-        for paper in discovery_report.get("papers", []):
-            if paper.get("status") != "resolved":
-                continue
+        resolved_papers = [
+            p for p in discovery_report.get("papers", []) if p.get("status") == "resolved"
+        ]
+        total_dl = sum(len(p.get("versions", [])) for p in resolved_papers)
+        current_dl = 0
+        for paper in resolved_papers:
             for version_entry in paper.get("versions", []):
+                current_dl += 1
                 version_id = version_entry["version_id"]
                 source_url = version_entry.get("source_url")
                 outcome = download_source(
@@ -793,6 +797,10 @@ def download_discovered_sources(
                     resume=resume,
                     client=client,
                     source_url=source_url,
+                )
+                print(
+                    f"[Download {current_dl}/{total_dl}] {version_id}: {outcome.status} "
+                    f"({outcome.bytes_downloaded} bytes)"
                 )
                 report["versions"].append(outcome.to_dict())
                 report["elapsed_seconds"] = time.monotonic() - started

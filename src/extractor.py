@@ -1,12 +1,21 @@
 """Safely extract only TeX and BibTeX source files from paper submissions."""
 
+from __future__ import annotations
+
+import argparse
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import json
 import ntpath
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import tarfile
 import tempfile
-from typing import List, Optional, Tuple, Union
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from .config import CrawlConfig
+from .discovery import write_json
 
 
 PathInput = Union[str, Path]
@@ -28,6 +37,16 @@ class ExtractionResult:
     retained_bytes: int = 0
     error: Optional[str] = None
     archive_uncompressed_bytes: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "status": self.status,
+            "input_bytes": self.input_bytes,
+            "files": list(self.files),
+            "retained_bytes": self.retained_bytes,
+            "error": self.error,
+            "archive_uncompressed_bytes": self.archive_uncompressed_bytes,
+        }
 
 
 class _UnsafeArchiveError(Exception):
@@ -312,3 +331,180 @@ def extract_source(source_path: PathInput, destination: PathInput) -> Extraction
         return ExtractionResult(
             status="extraction_error", input_bytes=input_bytes, error=str(exc)
         )
+
+
+def extract_downloaded_sources(
+    config: CrawlConfig,
+    *,
+    downloads_path: Optional[Path] = None,
+    resume: bool = False,
+) -> Dict[str, Any]:
+    """Extract all successfully downloaded sources recorded in ``state/downloads.json``.
+
+    Requires that Downloader has run and produced ``state/downloads.json``.
+    Extracts regular ``.tex``/``.bib`` files into ``source/`` under each version's
+    directory, records individual version extraction states, and writes an atomic
+    overall report to ``state/extractions.json``.
+    """
+    downloads_file = downloads_path or (config.output_dir / "state" / "downloads.json")
+    if not downloads_file.is_file():
+        raise FileNotFoundError(
+            f"Downloads state file not found: {downloads_file}. "
+            "Run download first before extracting sources."
+        )
+
+    downloads_report = json.loads(downloads_file.read_text(encoding="utf-8"))
+    report_path = config.output_dir / "state" / "extractions.json"
+    started = time.monotonic()
+
+    cached: Dict[str, Dict[str, Any]] = {}
+    if resume and report_path.is_file():
+        try:
+            previous = json.loads(report_path.read_text(encoding="utf-8"))
+            cached = {
+                item["version_id"]: item
+                for item in previous.get("versions", [])
+                if item.get("status") in ("success", "no_tex_source")
+            }
+        except (json.JSONDecodeError, OSError):
+            cached = {}
+
+    report: Dict[str, Any] = {
+        "schema_version": 1,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "downloads_path": str(downloads_file),
+        "versions": [],
+    }
+
+    versions_list = downloads_report.get("versions", [])
+    total_ext = len(versions_list)
+    for v_entry_idx, v_entry in enumerate(versions_list, 1):
+        version_id = v_entry["version_id"]
+        arxiv_id = v_entry.get("arxiv_id", "")
+        version_num = v_entry.get("version", 1)
+        dl_status = v_entry.get("status")
+
+        if dl_status != "downloaded" or not v_entry.get("source_path"):
+            report["versions"].append(
+                {
+                    "version_id": version_id,
+                    "arxiv_id": arxiv_id,
+                    "version": version_num,
+                    "source_path": None,
+                    "destination": None,
+                    "status": "skipped_not_downloaded",
+                    "input_bytes": 0,
+                    "files": [],
+                    "retained_bytes": 0,
+                    "archive_uncompressed_bytes": 0,
+                    "error": f"Source was not downloaded (download status: {dl_status})",
+                    "cache_hit": False,
+                    "extracted_at": None,
+                }
+            )
+            continue
+
+        raw_source_path = Path(v_entry["source_path"])
+        if raw_source_path.is_absolute():
+            source_path = raw_source_path
+        else:
+            # Check relative to repo root first, then config.output_dir
+            if raw_source_path.exists():
+                source_path = raw_source_path.resolve()
+            elif (config.output_dir.parent / raw_source_path).exists():
+                source_path = (config.output_dir.parent / raw_source_path).resolve()
+            elif (config.output_dir / raw_source_path).exists():
+                source_path = (config.output_dir / raw_source_path).resolve()
+            else:
+                source_path = raw_source_path
+
+        destination = source_path.parent / "source"
+        state_file = source_path.parent / "extraction_state.json"
+
+        if resume and version_id in cached:
+            cached_record = cached[version_id]
+            if destination.is_dir() or cached_record.get("status") == "no_tex_source":
+                record = dict(cached_record, cache_hit=True)
+                print(f"[Extract {v_entry_idx}/{total_ext}] {version_id}: cached ({len(record.get('files', []))} files)")
+                report["versions"].append(record)
+                report["elapsed_seconds"] = time.monotonic() - started
+                write_json(report_path, report)
+                continue
+
+        result = extract_source(source_path, destination)
+        extracted_at = datetime.now(timezone.utc).isoformat()
+        record = {
+            "version_id": version_id,
+            "arxiv_id": arxiv_id,
+            "version": version_num,
+            "source_path": str(source_path),
+            "destination": str(destination),
+            "status": result.status,
+            "input_bytes": result.input_bytes,
+            "files": result.files,
+            "retained_bytes": result.retained_bytes,
+            "archive_uncompressed_bytes": result.archive_uncompressed_bytes,
+            "error": result.error,
+            "cache_hit": False,
+            "extracted_at": extracted_at,
+        }
+        print(
+            f"[Extract {v_entry_idx}/{total_ext}] {version_id}: {result.status} "
+            f"({len(result.files)} files, {result.retained_bytes} bytes)"
+        )
+        write_json(state_file, record)
+        report["versions"].append(record)
+        report["elapsed_seconds"] = time.monotonic() - started
+        write_json(report_path, report)
+
+    versions = report["versions"]
+    report["summary"] = {
+        "expected_versions": len(versions),
+        "success": sum(1 for v in versions if v["status"] == "success"),
+        "no_tex_source": sum(1 for v in versions if v["status"] == "no_tex_source"),
+        "skipped_not_downloaded": sum(
+            1 for v in versions if v["status"] == "skipped_not_downloaded"
+        ),
+        "failed": sum(
+            1
+            for v in versions
+            if v["status"] not in ("success", "no_tex_source", "skipped_not_downloaded")
+        ),
+        "cache_hits": sum(1 for v in versions if v.get("cache_hit")),
+        "total_input_bytes": sum(v.get("input_bytes", 0) for v in versions),
+        "total_retained_bytes": sum(v.get("retained_bytes", 0) for v in versions),
+        "total_archive_uncompressed_bytes": sum(
+            v.get("archive_uncompressed_bytes", 0) for v in versions
+        ),
+    }
+    report["elapsed_seconds"] = time.monotonic() - started
+    write_json(report_path, report)
+    return report
+
+
+def main() -> None:
+    """CLI for extracting TeX/BibTeX sources from data/state/downloads.json."""
+    parser = argparse.ArgumentParser(
+        description="Extract TeX/BibTeX sources from downloaded packages."
+    )
+    parser.add_argument("--output", type=Path, default=Path("data"))
+    parser.add_argument(
+        "--resume", action="store_true", help="Reuse previously successful extractions"
+    )
+    args = parser.parse_args()
+
+    config = CrawlConfig(output_dir=args.output)
+    try:
+        report = extract_downloaded_sources(config, resume=args.resume)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}")
+        raise SystemExit(1) from exc
+
+    print(report["summary"])
+    print(f"Extraction output: {args.output / 'state' / 'extractions.json'}")
+    if report["summary"]["failed"]:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

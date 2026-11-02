@@ -1,4 +1,4 @@
-"""Initialize local folders, discover assigned papers first, and download identified versions."""
+"""Initialize local folders, discover assigned papers, download identified versions, and extract LaTeX sources."""
 
 import argparse
 import os
@@ -15,6 +15,7 @@ from .discovery import (
     write_json,
 )
 from .downloader import download_discovered_sources
+from .extractor import extract_downloaded_sources
 
 
 def main() -> None:
@@ -54,15 +55,24 @@ def main() -> None:
         action="store_true",
         help="Download versioned sources from state/discovery.json after discovery",
     )
+    parser.add_argument(
+        "--extract",
+        action="store_true",
+        help="Extract TeX/BibTeX sources from state/downloads.json into corpus/<paper>/<version>/source/",
+    )
     parser.add_argument("--resume", action="store_true", help="Reuse successful snapshots")
     parser.add_argument("--timeout", type=float, default=60)
     parser.add_argument("--attempts", type=int, default=3)
     args = parser.parse_args()
 
-    if not args.init and not args.discover and not args.download:
-        parser.error("Choose --init, --discover (--ids FILE or --range ...), or --download")
+    if not args.init and not args.discover and not args.download and not args.extract:
+        parser.error(
+            "Choose --init, --discover (--ids FILE or --range ...), --download, or --extract"
+        )
     if args.discover and args.ids is None and args.range is None:
-        parser.error("--discover requires --ids FILE or --range START_MONTH START_ID END_MONTH END_ID")
+        parser.error(
+            "--discover requires --ids FILE or --range START_MONTH START_ID END_MONTH END_ID"
+        )
     if args.timeout <= 0 or args.attempts < 1:
         parser.error("Timeout must be positive; attempts must be >= 1")
 
@@ -131,8 +141,15 @@ def main() -> None:
             print(f"Download output: {args.output / 'state' / 'downloads.json'}")
             if dl_report["summary"]["failed"] or dl_report["summary"]["invalid_response"]:
                 exit_code = 1
-        else:
+        elif not args.extract and not args.init:
             print("No sources downloaded: this command only initializes/discovers papers.")
+
+        if args.extract:
+            ext_report = extract_downloaded_sources(config, resume=args.resume)
+            print(ext_report["summary"])
+            print(f"Extraction output: {args.output / 'state' / 'extractions.json'}")
+            if ext_report["summary"]["failed"]:
+                exit_code = 1
     finally:
         if client is not None:
             client.close()

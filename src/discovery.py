@@ -463,10 +463,12 @@ def discover_papers(
     owned = client is None
     client = client or ArxivClient(config)
     try:
-        for base in bases:
+        total_bases = len(bases)
+        for idx, base in enumerate(bases, 1):
             paper_start = time.monotonic()
             if base in cached:
                 record = dict(cached[base], cache_hit=True)
+                print(f"[Discovery {idx}/{total_bases}] {base}: cached ({record.get('latest_version', 1)} versions)")
             else:
                 try:
                     record = dict(
@@ -475,6 +477,7 @@ def discover_papers(
                         cache_hit=False,
                         fetched_at=datetime.now(timezone.utc).isoformat(),
                     )
+                    print(f"[Discovery {idx}/{total_bases}] {base}: resolved ({record['latest_version']} versions)")
                 except (
                     requests.RequestException,
                     ET.ParseError,
@@ -488,6 +491,7 @@ def discover_papers(
                         "error": str(exc),
                         "cache_hit": False,
                     }
+                    print(f"[Discovery {idx}/{total_bases}] {base}: {type(exc).__name__}")
             record["discovery_seconds"] = time.monotonic() - paper_start
             report["papers"].append(record)
             report["elapsed_seconds"] = time.monotonic() - started

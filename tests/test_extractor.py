@@ -1,8 +1,15 @@
 import io
-import tarfile
+import json
 from pathlib import Path
+import pytest
+import tarfile
 
-from src.extractor import detect_source_format, extract_source
+from src.config import CrawlConfig
+from src.extractor import (
+    detect_source_format,
+    extract_downloaded_sources,
+    extract_source,
+)
 
 
 def _write_tar(path: Path, members):
@@ -173,3 +180,64 @@ def test_nested_archive_paths_are_preserved(tmp_path):
     }
     assert (destination / "paper/src/sections/introduction.tex").read_bytes() == tex
     assert (destination / "paper/references/library.bib").read_bytes() == bib
+
+
+def test_extract_downloaded_sources_batch_and_resume(tmp_path):
+    config = CrawlConfig(output_dir=tmp_path)
+    state_dir = tmp_path / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+
+    paper_v1_dir = tmp_path / "corpus" / "2310-12345" / "v1"
+    paper_v1_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = paper_v1_dir / "v1.tar.gz"
+    tex_bytes = b"\\documentclass{article}\n"
+    _write_tar(
+        archive_path,
+        [("main.tex", tex_bytes), ("fig.png", b"image-data")],
+    )
+
+    downloads_report = {
+        "schema_version": 1,
+        "versions": [
+            {
+                "version_id": "2310.12345v1",
+                "arxiv_id": "2310.12345",
+                "version": 1,
+                "status": "downloaded",
+                "source_path": str(archive_path),
+                "bytes_downloaded": archive_path.stat().st_size,
+            },
+            {
+                "version_id": "2310.12345v2",
+                "arxiv_id": "2310.12345",
+                "version": 2,
+                "status": "not_found",
+                "source_path": None,
+                "bytes_downloaded": 0,
+            },
+        ],
+    }
+    downloads_path = state_dir / "downloads.json"
+    downloads_path.write_text(json.dumps(downloads_report), encoding="utf-8")
+
+    report = extract_downloaded_sources(config)
+
+    assert report["summary"]["expected_versions"] == 2
+    assert report["summary"]["success"] == 1
+    assert report["summary"]["skipped_not_downloaded"] == 1
+    assert report["summary"]["failed"] == 0
+    assert report["summary"]["cache_hits"] == 0
+    assert (paper_v1_dir / "source" / "main.tex").read_bytes() == tex_bytes
+    assert not (paper_v1_dir / "source" / "fig.png").exists()
+    assert (paper_v1_dir / "extraction_state.json").is_file()
+    assert (state_dir / "extractions.json").is_file()
+
+    # Test resume reuses cached extraction
+    resumed = extract_downloaded_sources(config, resume=True)
+    assert resumed["summary"]["cache_hits"] == 1
+
+
+def test_extract_downloaded_sources_missing_downloads_raises(tmp_path):
+    config = CrawlConfig(output_dir=tmp_path)
+    with pytest.raises(FileNotFoundError, match="Downloads state file not found"):
+        extract_downloaded_sources(config)
