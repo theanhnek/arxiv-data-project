@@ -65,10 +65,7 @@ Tất cả ID trong khoảng phân công **phải đi qua bước Discovery trư
   ```powershell
   .\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --member-index 2 --output data --resume
   ```
-- **Hoặc truyền trực tiếp khoảng phân công qua `--range`** (tự động ghi `data/assigned_ids.txt` gồm 5.000 ID rồi chạy discovery):
-  ```powershell
-  .\.venv\Scripts\python.exe -m src.main --discover --range 2025-10 9401 2025-10 14400 --output data --resume
-  ```
+
 - **Hoặc chạy trên file danh sách ID đơn lẻ** (không cần `--member-index`):
   ```powershell
   .\.venv\Scripts\python.exe -m src.main --discover --ids data/assigned_ids.txt --output data --resume
@@ -114,7 +111,7 @@ finally:
     client.close()
 ```
 
-## Giao diện đã triển khai (`src/discovery.py`)
+## `src/discovery.py`
 
 - `load_ids(path, *, member_index=None, expected_total=5000, month_max_ids=None)` trả `ids`, `invalid`, `duplicates`. Hỗ trợ cả file liệt kê từng arXiv ID lẫn file bảng khoảng phân công `start_month start_id end_month end_id` (chọn dòng thành viên bằng `member_index`).
 - `normalize_id(value)` trả base ID chuẩn hóa (chữ thường với tiền tố archive cũ như `hep-th/9901001`); bỏ suffix version vì yêu cầu crawl cả publication.
@@ -139,7 +136,7 @@ Summary có `assigned_unique_ids`, `resolved`, `failed`, `expected_versions`, `c
 ## Giới hạn cần xử lý khi tích hợp
 
 - Atom metadata mặc định là bản mới nhất, không đảm bảo metadata riêng cho từng revision.
-- Atom trả published/updated, không trả trọn danh sách ngày revision. `revised_dates=[]` và cờ completeness ngăn hiểu nhầm rằng nhóm đã lấy đủ. Cần bổ sung nếu muốn hoàn thiện trường lịch sử.
+- Atom trả published/updated, không trả trọn danh sách ngày revision. `revised_dates=[]` và cờ completeness ngăn hiểu nhầm rằng nhóm đã lấy đủ.
 - Venue lấy từ journal reference, có thể gồm cả volume/pages, chưa phải venue được chuẩn hóa.
 - Resume dùng snapshot đã thành công; muốn phát hiện revision mới phải chạy fresh. Một output dir dùng cho một tiến trình discovery tại một thời điểm.
 - References, RAM/disk toàn hệ thống và extraction do các thành viên còn lại triển khai.
