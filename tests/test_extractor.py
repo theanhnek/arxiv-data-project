@@ -116,3 +116,60 @@ def test_tar_without_tex_keeps_an_empty_source_record(tmp_path):
     assert result.files == []
     assert result.retained_bytes == 0
     assert list(destination.iterdir()) == []
+
+
+def test_archive_uncompressed_bytes_counts_filtered_members(tmp_path):
+    archive = tmp_path / "paper.tar.gz"
+    members = [
+        ("paper/main.tex", b"\\documentclass{article}\n"),
+        ("paper/refs.bib", b"@article{key}\n"),
+        ("paper/figure.png", b"image bytes"),
+    ]
+    _write_tar(archive, members)
+
+    result = extract_source(archive, tmp_path / "source")
+
+    assert result.status == "success"
+    assert result.retained_bytes == len(members[0][1]) + len(members[1][1])
+    assert result.archive_uncompressed_bytes == sum(
+        len(payload) for _, payload in members
+    )
+
+
+def test_tex_only_archive_reports_success(tmp_path):
+    archive = tmp_path / "tex-only.tar.gz"
+    tex = b"\\documentclass{article}\n"
+    _write_tar(archive, [("paper/main.tex", tex)])
+
+    destination = tmp_path / "source"
+    result = extract_source(archive, destination)
+
+    assert result.status == "success"
+    assert result.files == ["paper/main.tex"]
+    assert result.retained_bytes == len(tex)
+    assert result.archive_uncompressed_bytes == len(tex)
+    assert (destination / "paper/main.tex").read_bytes() == tex
+
+
+def test_nested_archive_paths_are_preserved(tmp_path):
+    archive = tmp_path / "nested.tar.gz"
+    tex = b"\\section{Introduction}\n"
+    bib = b"@book{key}\n"
+    _write_tar(
+        archive,
+        [
+            ("paper/src/sections/introduction.tex", tex),
+            ("paper/references/library.bib", bib),
+        ],
+    )
+
+    destination = tmp_path / "source"
+    result = extract_source(archive, destination)
+
+    assert result.status == "success"
+    assert set(result.files) == {
+        "paper/src/sections/introduction.tex",
+        "paper/references/library.bib",
+    }
+    assert (destination / "paper/src/sections/introduction.tex").read_bytes() == tex
+    assert (destination / "paper/references/library.bib").read_bytes() == bib
