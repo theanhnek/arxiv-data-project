@@ -4,17 +4,17 @@ Thu thập và xử lý dữ liệu bài báo arXiv cho đồ án Nhập môn Kh
 
 ## Phạm vi triển khai
 
-Milestone 1 thu thập metadata, source LaTeX và reference metadata của các bài báo được phân công. Corpus này là đầu vào cho bước parsing ở Milestone 2 và reference matching ở Milestone 3.
+Milestone 1 thu thập metadata, source LaTeX và reference metadata của các bài báo được phân công. Corpus này là đầu vào cho bước parsing ở Milestone 2 và reference matching ở Milestone 3
 
 Hiện CLI hỗ trợ:
-1. **Bước 1 — Discovery (`--discover`)**: Mở rộng khoảng phân công (`start_month start_id end_month end_id`) hoặc đọc danh sách arXiv ID, lấy metadata từ arXiv API, xác định toàn bộ phiên bản (`v1..vN`) và lưu vào `data/state/discovery.json`.
-2. **Bước 2 — Download (`--download` / `src.downloader`)**: Tải tuần tự các gói source của mọi phiên bản đã được Discovery identify từ mirror `https://export.arxiv.org/src/{version_id}`, kiểm tra toàn vẹn `SHA-256` và lưu trạng thái vào `data/state/downloads.json`.
+1. **Bước 1 — Discovery (`--discover`)**: Mở rộng khoảng phân công (`start_month start_id end_month end_id`) hoặc đọc danh sách arXiv ID, lấy metadata từ arXiv API, xác định toàn bộ phiên bản (`v1..vN`) và lưu vào `data/state/discovery.json`
+2. **Bước 2 — Download (`--download` / `src.downloader`)**: Tải tuần tự các gói source của mọi phiên bản đã được Discovery identify từ mirror `https://export.arxiv.org/src/{version_id}`, kiểm tra toàn vẹn `SHA-256` và lưu trạng thái vào `data/state/downloads.json`
 
 ## Yêu cầu môi trường
 
-- Python 3.11+.
-- Kết nối Internet để truy cập arXiv API và mirror `export.arxiv.org`.
-- Các thư viện trong `src/requirements.txt`.
+- Python 3.11+
+- Kết nối Internet để truy cập arXiv API và mirror `export.arxiv.org`
+- Các thư viện trong `src/requirements.txt`
 
 Các lệnh dưới đây sử dụng PowerShell trên Windows và được chạy từ thư mục gốc của repository.
 
