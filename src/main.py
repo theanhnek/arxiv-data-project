@@ -1,4 +1,4 @@
-"""Initialize local folders, discover assigned papers, download identified versions, and extract LaTeX sources."""
+"""Initialize local folders, discover assigned papers, download identified versions, extract LaTeX sources, and compute metrics."""
 
 import argparse
 import os
@@ -16,6 +16,7 @@ from .discovery import (
 )
 from .downloader import download_discovered_sources
 from .extractor import extract_downloaded_sources
+from .metrics import ResourceMonitor, compute_pipeline_metrics
 
 
 def main() -> None:
@@ -60,14 +61,25 @@ def main() -> None:
         action="store_true",
         help="Extract TeX/BibTeX sources from state/downloads.json into corpus/<paper>/<version>/source/",
     )
+    parser.add_argument(
+        "--metrics",
+        action="store_true",
+        help="Monitor RAM/Disk/Runtime and write benchmark_summary.json + per_paper_metrics.json",
+    )
     parser.add_argument("--resume", action="store_true", help="Reuse successful snapshots")
     parser.add_argument("--timeout", type=float, default=60)
     parser.add_argument("--attempts", type=int, default=3)
     args = parser.parse_args()
 
-    if not args.init and not args.discover and not args.download and not args.extract:
+    if (
+        not args.init
+        and not args.discover
+        and not args.download
+        and not args.extract
+        and not args.metrics
+    ):
         parser.error(
-            "Choose --init, --discover (--ids FILE or --range ...), --download, or --extract"
+            "Choose --init, --discover (--ids FILE or --range ...), --download, --extract, or --metrics"
         )
     if args.discover and args.ids is None and args.range is None:
         parser.error(
@@ -92,6 +104,14 @@ def main() -> None:
     for name in ("corpus", "state", "metrics", "tmp"):
         (config.output_dir / name).mkdir(parents=True, exist_ok=True)
     print(f"Local data directories created: {config.output_dir.resolve()}")
+
+    monitor = (
+        ResourceMonitor(config.output_dir, config.metrics_sample_interval_seconds)
+        if args.metrics
+        else None
+    )
+    if monitor is not None:
+        monitor.start()
 
     client = ArxivClient(config) if (args.discover or args.download) else None
     exit_code = 0
@@ -141,7 +161,7 @@ def main() -> None:
             print(f"Download output: {args.output / 'state' / 'downloads.json'}")
             if dl_report["summary"]["failed"] or dl_report["summary"]["invalid_response"]:
                 exit_code = 1
-        elif not args.extract and not args.init:
+        elif not args.extract and not args.init and not args.metrics:
             print("No sources downloaded: this command only initializes/discovers papers.")
 
         if args.extract:
@@ -153,6 +173,31 @@ def main() -> None:
     finally:
         if client is not None:
             client.close()
+        if monitor is not None:
+            monitor.stop()
+
+    if args.metrics:
+        metrics_report = compute_pipeline_metrics(
+            config, monitor_snapshot=monitor.snapshot if monitor else None
+        )
+        print(
+            {
+                "resolved_papers": metrics_report["discovery"]["resolved_papers"],
+                "extracted_tex_versions": metrics_report["download_and_extraction"][
+                    "extracted_tex_versions"
+                ],
+                "figure_removal_savings_ratio": metrics_report["sizes_bytes"][
+                    "figure_removal_savings_ratio"
+                ],
+                "peak_ram_mb": metrics_report["performance"]["resources"]["peak_ram_mb"],
+                "final_corpus_disk_mb": metrics_report["performance"]["resources"][
+                    "final_corpus_disk_mb"
+                ],
+            }
+        )
+        print(
+            f"Metrics output: {args.output / 'metrics' / 'benchmark_summary.json'}"
+        )
 
     if exit_code != 0:
         raise SystemExit(exit_code)

@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from .config import CrawlConfig
 from .discovery import write_json
+from .downloader import safe_paper_dirname
 
 
 PathInput = Union[str, Path]
@@ -343,8 +344,8 @@ def extract_downloaded_sources(
 
     Requires that Downloader has run and produced ``state/downloads.json``.
     Extracts regular ``.tex``/``.bib`` files into ``source/`` under each version's
-    directory, records individual version extraction states, and writes an atomic
-    overall report to ``state/extractions.json``.
+    directory in ``corpus/<safe_id>/v<N>/source/``, records individual version
+    extraction states, and writes an atomic overall report to ``state/extractions.json``.
     """
     downloads_file = downloads_path or (config.output_dir / "state" / "downloads.json")
     if not downloads_file.is_file():
@@ -418,8 +419,17 @@ def extract_downloaded_sources(
             else:
                 source_path = raw_source_path
 
-        destination = source_path.parent / "source"
-        state_file = source_path.parent / "extraction_state.json"
+        if arxiv_id:
+            version_dir = (
+                config.output_dir
+                / "corpus"
+                / safe_paper_dirname(arxiv_id)
+                / f"v{version_num}"
+            )
+        else:
+            version_dir = source_path.parent
+        destination = version_dir / "source"
+        state_file = version_dir / "extraction_state.json"
 
         if resume and version_id in cached:
             cached_record = cached[version_id]
