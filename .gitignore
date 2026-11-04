@@ -16,6 +16,7 @@ __pycache__/
 /downloads/
 /outputs/
 /logs/
+/report_book/
 *.log
 
 # Editors and operating systems
@@ -23,4 +24,3 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
-
