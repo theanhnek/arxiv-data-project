@@ -7,10 +7,12 @@ Thu thập và xử lý dữ liệu bài báo arXiv cho đồ án Nhập môn Kh
 Milestone 1 thu thập metadata, source LaTeX và reference metadata của các bài báo được phân công. Corpus này là đầu vào cho bước parsing ở Milestone 2 và reference matching ở Milestone 3.
 
 Hiện CLI hỗ trợ:
-1. **Bước 1 — Discovery (`--discover`)**: Mở rộng khoảng phân công (`start_month start_id end_month end_id`) hoặc đọc danh sách arXiv ID, lấy metadata từ arXiv API, xác định toàn bộ phiên bản (`v1..vN`) và lưu vào `data/state/discovery.json`
+1. **Bước 1 — Discovery (`--discover` / `src.discovery`)**: Mở rộng khoảng phân công (`start_month start_id end_month end_id`) hoặc đọc danh sách arXiv ID, lấy metadata từ arXiv API, xác định toàn bộ phiên bản (`v1..vN`) và lưu vào `data/state/discovery.json`
 2. **Bước 2 — Download (`--download` / `src.downloader`)**: Tải tuần tự các gói source của mọi phiên bản đã được Discovery identify từ mirror `https://export.arxiv.org/src/{version_id}`, kiểm tra toàn vẹn `SHA-256` và lưu trạng thái vào `data/state/downloads.json`
 3. **Bước 3 — Extraction (`--extract` / `src.extractor`)**: Trích xuất an toàn các file `.tex` và `.bib` từ các gói source đã tải, loại bỏ hoàn toàn hình ảnh và file binary, bảo toàn cấu trúc thư mục và bytes nội dung, lưu trạng thái vào `data/state/extractions.json`
-4. **Bước 5 — Metrics & Benchmark (`--metrics` / `src.metrics`)**: Đo đạc tài nguyên hệ thống theo thời gian thực (RAM, Disk qua `psutil`), tổng hợp toàn bộ số liệu hiệu năng, tính toán tỷ lệ tiết kiệm dung lượng khi loại bỏ hình ảnh, xuất `data/metrics/benchmark_summary.json` và `data/metrics/per_paper_metrics.json` phục vụ báo cáo Jupyter Book.
+4. **Bước 4 — References & Storage (`--references`, `--export` / `src.references`, `src.storage`)**: Thu thập trích dẫn từ Semantic Scholar API theo base arXiv ID, tự động điều tiết rate limit và phân trang, lưu toàn bộ trích dẫn thô vào `corpus/<paper>/references.json`, đồng thời xuất 2 bảng dữ liệu chuẩn `papers.jsonl` và `references.jsonl` vào `data/export/`
+5. **Bước 5 — Metrics & Benchmark (`--metrics` / `src.metrics`)**: Đo đạc tài nguyên hệ thống theo thời gian thực (RAM, Disk qua `psutil`), tổng hợp toàn bộ số liệu hiệu năng, tính toán tỷ lệ tiết kiệm dung lượng khi loại bỏ hình ảnh, xuất `data/metrics/benchmark_summary.json` và `data/metrics/per_paper_metrics.json` phục vụ báo cáo Jupyter Book
+6. **Toàn tuyến Pipeline (`--all`)**: Chạy xuyên suốt toàn bộ cả 5 bước trên trong một lệnh duy nhất kèm theo dõi tài nguyên hệ thống.
 
 ## Yêu cầu môi trường
 
@@ -46,26 +48,28 @@ CLI đọc biến này khi khởi động. `SEMANTIC_SCHOLAR_API_KEY` được d
 .\.venv\Scripts\python.exe -m src.main --init --output data
 ```
 
-### 2. Chuẩn bị danh sách bài báo được phân công
+### 2. Chuẩn bị danh sách bài báo được phân công (`assigned_ids.txt`)
 
-Bộ đọc `load_ids` trong `src/discovery.py` hỗ trợ cả **bảng khoảng phân công 5 dòng của nhóm** (`start_month start_id end_month end_id`) lẫn **danh sách từng arXiv ID**:
+Hệ thống hỗ trợ 2 cách thiết lập file `data/assigned_ids.txt`:
 
-- **Cách A — Lưu bảng phân công 5 dòng vào `data/assigned_ids.txt`**:
-  ```text
-  2025-10	14401	2025-10	19400
-  2025-10	9401	2025-10	14400
-  2025-10	4401	2025-10	9400
-  2025-09	26047	2025-10	4400
-  2025-09	11047	2025-09	16046
-  ```
-- **Cách B — Hoặc liệt kê từng arXiv ID trên mỗi dòng**:
-  ```text
-  # Sample IDs; replace with the assigned list before the full crawl.
-  1706.03762
-  1810.04805
-  ```
+#### Cách A — Bảng khoảng phân công 5 dòng của nhóm (Mỗi dòng là dải 5.000 bài của 1 thành viên)
+Lưu file `data/assigned_ids.txt` với nội dung dạng TSV hoặc khoảng trắng (`start_month  start_id  end_month  end_id`):
+```text
+2025-10	14401	2025-10	19400    # Thành viên 1: Kiệt
+2025-10	9401	2025-10	14400    # Thành viên 2: Dương
+2025-10	4401	2025-10	9400     # Thành viên 3: Hà
+2025-09	26047	2025-10	4400     # Thành viên 4: Kiên (vắt qua 2 tháng)
+2025-09	11047	2025-09	16046    # Thành viên 5: Anh
+```
+> Khi chạy với file bảng này, sử dụng thêm cờ `--member-index (1..5)` để chọn đúng dải 5.000 bài của thành viên đó.
 
-Bộ đọc hỗ trợ khoảng ID (`YYYY-MM` + số thứ tự), ID mới (`YYMM.NNNNN`), ID cũ như `hep-th/9901001`, suffix phiên bản như `1706.03762v2`, dòng trống và comment bắt đầu bằng `#`. ID có suffix được quy về publication để tìm tất cả phiên bản. ID trùng được loại bỏ; dòng sai định dạng được ghi lại tại `data/state/input_validation.json`.
+#### Cách B — Liệt kê danh sách từng arXiv ID cụ thể (Mỗi dòng 1 ID, thích hợp chạy thử tập nhỏ)
+```text
+# Danh sách chạy thử nghiệm nhanh
+2509.11047
+2509.11048
+```
+> Hỗ trợ ID mới (`YYMM.NNNNN`), ID cũ (`hep-th/9901001`), suffix version (`...v2`), comment `#` và dòng trống. ID trùng được tự động loại bỏ.
 
 ### 3. Bước 1 — Chạy Discovery (Identify bài báo & các phiên bản trước)
 
@@ -137,20 +141,82 @@ Hoặc gọi trực tiếp module `src.metrics`:
 .\.venv\Scripts\python.exe -m src.metrics --output data
 ```
 
-### 8. Chạy gộp các bước trong một lệnh
+### 8. Hướng dẫn các cách chạy Pipeline (Demo & Thực tế)
 
-Có thể gộp tuần tự cả quy trình kèm theo dõi tài nguyên RAM/Disk thời gian thực:
+Hệ thống hỗ trợ 3 cách chạy toàn tuyến (**Discovery** $\rightarrow$ **Download** $\rightarrow$ **Extract** $\rightarrow$ **References** $\rightarrow$ **Export** $\rightarrow$ **Metrics**) kèm đo tài nguyên hệ thống bằng cờ `--all`:
 
+---
+
+#### Cách 1: Chạy CLI với `--range` trực tiếp (Khuyên dùng khi test nhanh hoặc chạy theo dải)
+Không cần tạo trước file ID; truyền trực tiếp dải ID vào câu lệnh:
+
+- **Lệnh Test nhanh 2 bài (Smoke Test toàn luồng mất ~30 giây):**
+  - *PowerShell:*
+    ```powershell
+    .\.venv\Scripts\python.exe -m src.main --all --range 2025-09 11047 2025-09 11048 --output data --resume
+    ```
+  - *Command Prompt (CMD):*
+    ```cmd
+    .venv\Scripts\python.exe -m src.main --all --range 2025-09 11047 2025-09 11048 --output data --resume
+    ```
+
+- **Lệnh chạy Full dải 5.000 bài (Ví dụ Thành viên 2: `2025-10 9401` đến `2025-10 14400`):**
+  - *PowerShell:*
+    ```powershell
+    .\.venv\Scripts\python.exe -m src.main --all --range 2025-10 9401 2025-10 14400 --output data --resume
+    ```
+  - *CMD:*
+    ```cmd
+    .venv\Scripts\python.exe -m src.main --all --range 2025-10 9401 2025-10 14400 --output data --resume
+    ```
+
+---
+
+#### Cách 2: Chạy CLI với file phân công `--ids data/assigned_ids.txt`
+
+- **Nếu file là Bảng 5 dòng phân công:** Dùng kèm `--member-index 1..5`:
+  - *PowerShell:*
+    ```powershell
+    # Ví dụ chạy dải 5.000 bài của Thành viên 2:
+    .\.venv\Scripts\python.exe -m src.main --all --ids data/assigned_ids.txt --member-index 2 --output data --resume
+    ```
+  - *CMD:*
+    ```cmd
+    .venv\Scripts\python.exe -m src.main --all --ids data/assigned_ids.txt --member-index 2 --output data --resume
+    ```
+
+- **Nếu file là danh sách từng arXiv ID cụ thể:** Bỏ cờ `--member-index`:
+  - *PowerShell:*
+    ```powershell
+    .\.venv\Scripts\python.exe -m src.main --all --ids data/assigned_ids.txt --output data --resume
+    ```
+  - *CMD:*
+    ```cmd
+    .venv\Scripts\python.exe -m src.main --all --ids data/assigned_ids.txt --output data --resume
+    ```
+
+---
+
+#### Cách 3: Chạy trực quan bằng Notebook (`src/colab_benchmark.ipynb`)
+- **Chạy trên Google Colab CPU-only:**
+  1. Mở file `src/colab_benchmark.ipynb` trên Colab (Runtime: CPU-only).
+  2. Chọn `RUN_MODE = "PILOT"` (chạy thử 5 bài) hoặc `"FULL_MEMBER"` (chạy 5.000 bài theo `MEMBER_INDEX`).
+  3. Bấm **Run All** để xem tiến trình và tự động sinh file đo lường `data/metrics/benchmark_summary.json`.
+- **Chạy trong VS Code:** Mở file notebook và chọn kernel `.venv`.
+
+---
+
+#### Cách 4: Chạy kết hợp các bước đơn lẻ (Phục vụ kiểm tra độc lập từng module)
+Có thể gọi riêng lẻ từng bước hoặc ghép nối tùy ý:
 ```powershell
-.\.venv\Scripts\python.exe -m src.main --discover --download --extract --metrics --range 2025-10 9401 2025-10 14400 --output data --resume --timeout 60 --attempts 3
-```
-
-Thêm `--references --export` vào lệnh gộp để thu thập references và xuất hai bảng (xem Bước 4).
-
-Hoặc gộp Bước 2 (Download) và Bước 3 (Extract):
-
-```powershell
+# Chỉ chạy Download và Extract cho dữ liệu đã Discovery trước đó:
 .\.venv\Scripts\python.exe -m src.main --download --extract --output data --resume
+
+# Chỉ chạy thu thập References và xuất 2 bảng dữ liệu:
+.\.venv\Scripts\python.exe -m src.main --references --export --output data --resume
+
+# Chỉ tính toán lại bảng metrics hiệu năng:
+.\.venv\Scripts\python.exe -m src.main --metrics --output data
 ```
 
 Xem toàn bộ tùy chọn:

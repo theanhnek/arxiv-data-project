@@ -84,10 +84,23 @@ def main() -> None:
         action="store_true",
         help="Monitor RAM/Disk/Runtime and write benchmark_summary.json + per_paper_metrics.json",
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Run full end-to-end pipeline: discover -> download -> extract -> references -> export -> metrics",
+    )
     parser.add_argument("--resume", action="store_true", help="Reuse successful snapshots")
     parser.add_argument("--timeout", type=float, default=60)
     parser.add_argument("--attempts", type=int, default=3)
     args = parser.parse_args()
+
+    if args.all:
+        args.discover = True
+        args.download = True
+        args.extract = True
+        args.references = True
+        args.export = True
+        args.metrics = True
 
     if (
         not args.init
