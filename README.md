@@ -10,6 +10,7 @@ Hiện CLI hỗ trợ:
 1. **Bước 1 — Discovery (`--discover`)**: Mở rộng khoảng phân công (`start_month start_id end_month end_id`) hoặc đọc danh sách arXiv ID, lấy metadata từ arXiv API, xác định toàn bộ phiên bản (`v1..vN`) và lưu vào `data/state/discovery.json`
 2. **Bước 2 — Download (`--download` / `src.downloader`)**: Tải tuần tự các gói source của mọi phiên bản đã được Discovery identify từ mirror `https://export.arxiv.org/src/{version_id}`, kiểm tra toàn vẹn `SHA-256` và lưu trạng thái vào `data/state/downloads.json`
 3. **Bước 3 — Extraction (`--extract` / `src.extractor`)**: Trích xuất an toàn các file `.tex` và `.bib` từ các gói source đã tải, loại bỏ hoàn toàn hình ảnh và file binary, bảo toàn cấu trúc thư mục và bytes nội dung, lưu trạng thái vào `data/state/extractions.json`
+4. **Bước 5 — Metrics & Benchmark (`--metrics` / `src.metrics`)**: Đo đạc tài nguyên hệ thống theo thời gian thực (RAM, Disk qua `psutil`), tổng hợp toàn bộ số liệu hiệu năng, tính toán tỷ lệ tiết kiệm dung lượng khi loại bỏ hình ảnh, xuất `data/metrics/benchmark_summary.json` và `data/metrics/per_paper_metrics.json` phục vụ báo cáo Jupyter Book.
 
 ## Yêu cầu môi trường
 
@@ -111,12 +112,26 @@ Hoặc gọi trực tiếp module `src.extractor`:
 .\.venv\Scripts\python.exe -m src.extractor --output data --resume
 ```
 
-### 6. Chạy gộp các bước trong một lệnh
+### 6. Bước 5 — Đo đạc Metrics & Hiệu năng
 
-Có thể gộp tuần tự cả 3 bước (Discovery $\rightarrow$ Download $\rightarrow$ Extract) trong một lệnh duy nhất:
+Tổng hợp các chỉ số hiệu năng và tài nguyên từ các bước trước:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.main --discover --download --extract --range 2025-10 9401 2025-10 14400 --output data --resume --timeout 60 --attempts 3
+.\.venv\Scripts\python.exe -m src.main --metrics --output data
+```
+
+Hoặc gọi trực tiếp module `src.metrics`:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.metrics --output data
+```
+
+### 7. Chạy gộp các bước trong một lệnh
+
+Có thể gộp tuần tự cả quy trình kèm theo dõi tài nguyên RAM/Disk thời gian thực:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --discover --download --extract --metrics --range 2025-10 9401 2025-10 14400 --output data --resume --timeout 60 --attempts 3
 ```
 
 Hoặc gộp Bước 2 (Download) và Bước 3 (Extract):
@@ -131,6 +146,7 @@ Xem toàn bộ tùy chọn:
 .\.venv\Scripts\python.exe -m src.main --help
 .\.venv\Scripts\python.exe -m src.downloader --help
 .\.venv\Scripts\python.exe -m src.extractor --help
+.\.venv\Scripts\python.exe -m src.metrics --help
 ```
 
 ### Đọc kết quả
@@ -140,29 +156,33 @@ Xem toàn bộ tùy chọn:
 - `data/state/downloads.json`: kết quả tải từng version (`downloaded`, `not_found`, `invalid_response`, `failed`), đường dẫn file nguồn, kích thước byte, mã băm `SHA-256` và thống kê download.
 - `data/state/extractions.json`: kết quả giải nén từng version (`success`, `no_tex_source`, `skipped_not_downloaded`, `failed`), danh sách file `.tex`/`.bib`, dung lượng byte giữ lại (`retained_bytes`), tổng dung lượng uncompressed archive (`archive_uncompressed_bytes`) và thống kê extraction.
 - `data/corpus/<paper_id>/<vN>/source/`: thư mục chứa các file mã nguồn `.tex` và `.bib` của từng phiên bản sau khi đã lọc bỏ hoàn toàn các file ảnh và file binary.
+- `data/metrics/benchmark_summary.json`: báo cáo tổng quan toàn bộ pipeline (thời gian chạy từng bước, tỷ lệ thành công, RAM đỉnh/trung bình, Disk đỉnh/cuối, tỷ lệ tiết kiệm khi lọc ảnh và độ bao phủ trích dẫn).
+- `data/metrics/per_paper_metrics.json`: bảng dữ liệu chi tiết cho từng bài báo và từng phiên bản dùng để đưa vào Jupyter Book tạo bảng và biểu đồ tự động.
 
 ## Cấu trúc repository
 
 ```text
 arxiv-data-project/
 ├── src/
-│   ├── main.py              # CLI (init, discover -> download -> extract)
-│   ├── config.py            # Cấu hình dùng chung
-│   ├── discovery.py         # Mở rộng khoảng ID, resolve metadata & liệt kê phiên bản
-│   ├── downloader.py        # Tải versioned sources từ state/discovery.json
-│   ├── extractor.py         # Trích xuất .tex/.bib và loại bỏ hình ảnh/binary
-│   ├── references.py        # Module reference metadata
-│   ├── storage.py           # Module lưu dữ liệu
-│   ├── metrics.py           # Module đo hiệu năng
+│   ├── main.py                 # CLI (init, discover -> download -> extract -> metrics)
+│   ├── config.py               # Cấu hình dùng chung
+│   ├── discovery.py            # Mở rộng khoảng ID, resolve metadata & liệt kê phiên bản
+│   ├── downloader.py           # Tải versioned sources từ state/discovery.json
+│   ├── extractor.py            # Trích xuất .tex/.bib và loại bỏ hình ảnh/binary
+│   ├── references.py           # Module reference metadata
+│   ├── storage.py              # Module lưu dữ liệu
+│   ├── metrics.py              # Module đo hiệu năng & tài nguyên hệ thống
+│   ├── colab_benchmark.ipynb   # Notebook chạy benchmark trên Google Colab CPU-only
 │   └── requirements.txt
-├── tests/                   # Kiểm tra tự động (offline)
+├── tests/                      # Kiểm tra tự động (offline)
 ├── docs/
-│   ├── discovery.md         # Giao diện, schema và hướng dẫn chạy Discovery (Thành viên 1)
-│   ├── downloader.md        # Giao diện, schema và hướng dẫn chạy Downloader (Thành viên 2)
-│   └── extractor.md         # Giao diện, schema và hướng dẫn chạy Extractor (Thành viên 3)
+│   ├── discovery.md            # Giao diện, schema và hướng dẫn chạy Discovery (Thành viên 1)
+│   ├── downloader.md           # Giao diện, schema và hướng dẫn chạy Downloader (Thành viên 2)
+│   ├── extractor.md            # Giao diện, schema và hướng dẫn chạy Extractor (Thành viên 3)
+│   └── metrics.md              # Giao diện, schema và hướng dẫn chạy Metrics (Thành viên 5)
 ├── .env.example
 ├── .gitignore
-├── plan.md                  # Kế hoạch triển khai
+├── plan.md                     # Kế hoạch triển khai
 └── README.md
 ```
 
@@ -173,18 +193,19 @@ Thư mục `data/` được tạo cục bộ khi chạy và được loại kh�
 Chạy toàn bộ các kiểm tra tự động offline (không gửi request thật đến arXiv):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py -v --basetemp data/test-suite
+.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py tests/test_metrics.py -v --basetemp data/test-suite
 ```
 
 ## Schema và giới hạn hiện tại
 
-Đặc tả đầu ra và giao diện tích hợp được mô tả chi tiết trong [docs/discovery.md](docs/discovery.md), [docs/downloader.md](docs/downloader.md), và [docs/extractor.md](docs/extractor.md).
+Đặc tả đầu ra và giao diện tích hợp được mô tả chi tiết trong [docs/discovery.md](docs/discovery.md), [docs/downloader.md](docs/downloader.md), [docs/extractor.md](docs/extractor.md), và [docs/metrics.md](docs/metrics.md).
 
 - Metadata được lấy ở mức publication theo phiên bản mới nhất, chưa phải metadata riêng cho mỗi revision.
 - `latest_updated_date` là thời điểm cập nhật mới nhất. `revised_dates` chưa có lịch sử đầy đủ khi `revision_dates_complete` là `false`.
 - `venue` hiện lấy từ journal reference của arXiv và chưa được chuẩn hóa thành tên venue riêng.
 - Discovery và Downloader sử dụng chung cơ chế request tuần tự với khoảng cách ít nhất 3 giây (`ArxivClient`).
 - Quá trình Extraction lọc bỏ tất cả file không có đuôi `.tex` hoặc `.bib` (như file ảnh `.png`, `.jpg`, `.pdf`, `.eps`), giữ nguyên cấu trúc thư mục con và bảo toàn từng byte của file nguồn.
+- Module Metrics tự động tổng hợp số liệu kể cả khi module references của Thành viên 4 chưa hoàn thành (được đánh dấu `references.available = false`).
 
 ## Báo cáo và dữ liệu
 
