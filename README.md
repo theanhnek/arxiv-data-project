@@ -112,7 +112,18 @@ Hoặc gọi trực tiếp module `src.extractor`:
 .\.venv\Scripts\python.exe -m src.extractor --output data --resume
 ```
 
-### 6. Bước 5 — Đo đạc Metrics & Hiệu năng
+### 6. Bước 4 — Thu thập References từ Semantic Scholar và xuất hai bảng
+
+Chỉ cần có `data/state/discovery.json` (không phụ thuộc Download/Extract). Điền `SEMANTIC_SCHOLAR_API_KEY` trong `.env` nếu có để chạy nhanh hơn (1 request/giây; không có khóa là 1 request/3,1 giây):
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --references --output data --resume
+.\.venv\Scripts\python.exe -m src.main --export --output data
+```
+
+Thử nhanh với một bài trước khi chạy cả dải: `.\.venv\Scripts\python.exe -m src.references --arxiv-id 1706.03762 --output data/smoke`. Chi tiết, schema và hạn chế: [docs/references.md](docs/references.md).
+
+### 7. Bước 5 — Đo đạc Metrics & Hiệu năng
 
 Tổng hợp các chỉ số hiệu năng và tài nguyên từ các bước trước:
 
@@ -126,13 +137,15 @@ Hoặc gọi trực tiếp module `src.metrics`:
 .\.venv\Scripts\python.exe -m src.metrics --output data
 ```
 
-### 7. Chạy gộp các bước trong một lệnh
+### 8. Chạy gộp các bước trong một lệnh
 
 Có thể gộp tuần tự cả quy trình kèm theo dõi tài nguyên RAM/Disk thời gian thực:
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.main --discover --download --extract --metrics --range 2025-10 9401 2025-10 14400 --output data --resume --timeout 60 --attempts 3
 ```
+
+Thêm `--references --export` vào lệnh gộp để thu thập references và xuất hai bảng (xem Bước 4).
 
 Hoặc gộp Bước 2 (Download) và Bước 3 (Extract):
 
@@ -158,19 +171,22 @@ Xem toàn bộ tùy chọn:
 - `data/corpus/<paper_id>/<vN>/source/`: thư mục chứa các file mã nguồn `.tex` và `.bib` của từng phiên bản sau khi đã lọc bỏ hoàn toàn các file ảnh và file binary.
 - `data/metrics/benchmark_summary.json`: báo cáo tổng quan toàn bộ pipeline (thời gian chạy từng bước, tỷ lệ thành công, RAM đỉnh/trung bình, Disk đỉnh/cuối, tỷ lệ tiết kiệm khi lọc ảnh và độ bao phủ trích dẫn).
 - `data/metrics/per_paper_metrics.json`: bảng dữ liệu chi tiết cho từng bài báo và từng phiên bản dùng để đưa vào Jupyter Book tạo bảng và biểu đồ tự động.
+- `data/state/references.json`: kết quả references từng bài (`success`, `empty_references`, `not_found`, `failed`), số reference và thống kê.
+- `data/corpus/<paper_id>/references.json`: toàn bộ reference của bài (cấp publication, áp dụng cho mọi version), gồm cả reference không có arXiv ID và phản hồi thô.
+- `data/export/papers.jsonl`, `data/export/references.jsonl`: hai bảng cuối (`references` chỉ gồm reference có arXiv ID).
 
 ## Cấu trúc repository
 
 ```text
 arxiv-data-project/
 ├── src/
-│   ├── main.py                 # CLI (init, discover -> download -> extract -> metrics)
+│   ├── main.py                 # CLI (init, discover -> download -> extract -> references -> export -> metrics)
 │   ├── config.py               # Cấu hình dùng chung
 │   ├── discovery.py            # Mở rộng khoảng ID, resolve metadata & liệt kê phiên bản
 │   ├── downloader.py           # Tải versioned sources từ state/discovery.json
 │   ├── extractor.py            # Trích xuất .tex/.bib và loại bỏ hình ảnh/binary
-│   ├── references.py           # Module reference metadata
-│   ├── storage.py              # Module lưu dữ liệu
+│   ├── references.py           # Thu thập references từ Semantic Scholar (Thành viên 4)
+│   ├── storage.py              # Lưu JSON an toàn, ánh xạ ID, xuất hai bảng (Thành viên 4)
 │   ├── metrics.py              # Module đo hiệu năng & tài nguyên hệ thống
 │   ├── colab_benchmark.ipynb   # Notebook chạy benchmark trên Google Colab CPU-only
 │   └── requirements.txt
@@ -179,6 +195,7 @@ arxiv-data-project/
 │   ├── discovery.md            # Giao diện, schema và hướng dẫn chạy Discovery (Thành viên 1)
 │   ├── downloader.md           # Giao diện, schema và hướng dẫn chạy Downloader (Thành viên 2)
 │   ├── extractor.md            # Giao diện, schema và hướng dẫn chạy Extractor (Thành viên 3)
+│   ├── references.md           # Giao diện, schema và hướng dẫn chạy References & Storage (Thành viên 4)
 │   └── metrics.md              # Giao diện, schema và hướng dẫn chạy Metrics (Thành viên 5)
 ├── .env.example
 ├── .gitignore
@@ -193,12 +210,12 @@ Thư mục `data/` được tạo cục bộ khi chạy và được loại kh�
 Chạy toàn bộ các kiểm tra tự động offline (không gửi request thật đến arXiv):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py tests/test_metrics.py -v --basetemp data/test-suite
+.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py tests/test_storage.py tests/test_references.py tests/test_metrics.py -v --basetemp data/test-suite
 ```
 
 ## Schema và giới hạn hiện tại
 
-Đặc tả đầu ra và giao diện tích hợp được mô tả chi tiết trong [docs/discovery.md](docs/discovery.md), [docs/downloader.md](docs/downloader.md), [docs/extractor.md](docs/extractor.md), và [docs/metrics.md](docs/metrics.md).
+Đặc tả đầu ra và giao diện tích hợp được mô tả chi tiết trong [docs/discovery.md](docs/discovery.md), [docs/downloader.md](docs/downloader.md), [docs/extractor.md](docs/extractor.md), [docs/references.md](docs/references.md) và [docs/metrics.md](docs/metrics.md).
 
 - Metadata được lấy ở mức publication theo phiên bản mới nhất, chưa phải metadata riêng cho mỗi revision.
 - `latest_updated_date` là thời điểm cập nhật mới nhất. `revised_dates` chưa có lịch sử đầy đủ khi `revision_dates_complete` là `false`.
@@ -218,3 +235,4 @@ Corpus được nhóm lưu để sử dụng cho các milestone sau. Milestone 1
 - [arXiv API User Manual](https://info.arxiv.org/help/api/user-manual.html)
 - [arXiv API Terms of Use](https://info.arxiv.org/help/api/tou.html)
 - [Project Problem Statements](https://hcmus-cs-ta.github.io/lab-book/intro-ds/statement/)
+- References lấy ở mức publication từ Semantic Scholar, không phân biệt version. `ref_submission_date` để trống cho tới khi có ngày nộp từ metadata arXiv (không dùng `publicationDate`/`year` thay thế).

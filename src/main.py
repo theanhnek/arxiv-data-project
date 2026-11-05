@@ -1,4 +1,4 @@
-"""Initialize local folders, discover assigned papers, download identified versions, extract LaTeX sources, and compute metrics."""
+"""Initialize local folders, discover assigned papers, download identified versions, extract LaTeX sources, collect references, export tables, and compute metrics."""
 
 import argparse
 import os
@@ -17,6 +17,8 @@ from .discovery import (
 from .downloader import download_discovered_sources
 from .extractor import extract_downloaded_sources
 from .metrics import ResourceMonitor, compute_pipeline_metrics
+from .references import collect_references
+from .storage import export_tables
 
 
 def main() -> None:
@@ -62,6 +64,22 @@ def main() -> None:
         help="Extract TeX/BibTeX sources from state/downloads.json into corpus/<paper>/<version>/source/",
     )
     parser.add_argument(
+        "--references",
+        action="store_true",
+        help="Collect Semantic Scholar references of the papers in state/discovery.json "
+        "into corpus/<paper>/references.json and state/references.json",
+    )
+    parser.add_argument(
+        "--retry-not-found",
+        action="store_true",
+        help="With --references --resume, query papers cached as not_found again",
+    )
+    parser.add_argument(
+        "--export",
+        action="store_true",
+        help="Write the final papers and references tables to <output>/export/*.jsonl",
+    )
+    parser.add_argument(
         "--metrics",
         action="store_true",
         help="Monitor RAM/Disk/Runtime and write benchmark_summary.json + per_paper_metrics.json",
@@ -76,10 +94,13 @@ def main() -> None:
         and not args.discover
         and not args.download
         and not args.extract
+        and not args.references
+        and not args.export
         and not args.metrics
     ):
         parser.error(
-            "Choose --init, --discover (--ids FILE or --range ...), --download, --extract, or --metrics"
+            "Choose --init, --discover (--ids FILE or --range ...), --download, --extract, "
+            "--references, --export, or --metrics"
         )
     if args.discover and args.ids is None and args.range is None:
         parser.error(
@@ -95,11 +116,15 @@ def main() -> None:
     except ImportError:
         pass
 
+    s2_api_key = (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip() or None
     config = CrawlConfig(
         output_dir=args.output,
         request_timeout_seconds=args.timeout,
         max_attempts=args.attempts,
         user_agent=os.getenv("ARXIV_USER_AGENT", "Lab1ArxivCrawler/0.1"),
+        s2_api_key=s2_api_key,
+        # 1 request/second with an API key; the safer 3.1 s default without one.
+        **({"s2_delay_seconds": 1.0} if s2_api_key else {}),
     )
     for name in ("corpus", "state", "metrics", "tmp"):
         (config.output_dir / name).mkdir(parents=True, exist_ok=True)
@@ -161,7 +186,13 @@ def main() -> None:
             print(f"Download output: {args.output / 'state' / 'downloads.json'}")
             if dl_report["summary"]["failed"] or dl_report["summary"]["invalid_response"]:
                 exit_code = 1
-        elif not args.extract and not args.init and not args.metrics:
+        elif (
+            not args.extract
+            and not args.references
+            and not args.export
+            and not args.init
+            and not args.metrics
+        ):
             print("No sources downloaded: this command only initializes/discovers papers.")
 
         if args.extract:
@@ -170,6 +201,25 @@ def main() -> None:
             print(f"Extraction output: {args.output / 'state' / 'extractions.json'}")
             if ext_report["summary"]["failed"]:
                 exit_code = 1
+
+        if args.references:
+            try:
+                ref_report = collect_references(
+                    config, resume=args.resume, retry_not_found=args.retry_not_found
+                )
+            except FileNotFoundError as exc:
+                parser.error(str(exc))
+            print(ref_report["summary"])
+            print(f"References output: {args.output / 'state' / 'references.json'}")
+            if ref_report["summary"]["failed_queries"] or ref_report["summary"]["aborted"]:
+                exit_code = 1
+
+        if args.export:
+            try:
+                exported = export_tables(config)
+            except FileNotFoundError as exc:
+                parser.error(str(exc))
+            print(exported)
     finally:
         if client is not None:
             client.close()
