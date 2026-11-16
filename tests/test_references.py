@@ -148,10 +148,18 @@ def test_normalize_reference_flat_record():
     assert ref["publication_date"] == "2020-05-01"
 
 
-def test_normalize_reference_never_fabricates_submission_date():
+def test_normalize_reference_submission_date_is_the_publication_date():
     ref = normalize_reference(cited(1, arxiv="1706.03762"), 0)
     assert ref["publication_date"] == "2020-05-01"
-    assert ref["submission_date"] is None
+    assert ref["submission_date"] == "2020-05-01"
+
+
+def test_normalize_reference_never_builds_a_date_from_the_bare_year():
+    item = cited(1, arxiv="1706.03762")
+    item["citedPaper"]["publicationDate"] = None
+    ref = normalize_reference(item, 0)
+    assert ref["year"] == 2020
+    assert ref["publication_date"] is None and ref["submission_date"] is None
 
 
 def test_normalize_reference_keeps_old_style_ids_and_flags_invalid():
@@ -417,7 +425,7 @@ def test_collect_writes_cache_and_report(tmp_path):
     assert summary["avg_references_per_successful_paper"] == 1.0
     assert summary["field_coverage_rates"]["arxiv_id"] == 0.5
     assert summary["field_coverage_rates"]["title"] == 1.0
-    assert summary["field_coverage_rates"]["submission_date"] == 0.0
+    assert summary["field_coverage_rates"]["submission_date"] == 1.0
     assert summary["requests_this_run"] == 6
     assert summary["aborted"] is None
     assert report["complete"] is True and report["authenticated"] is False

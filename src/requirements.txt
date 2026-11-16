@@ -3,3 +3,5 @@ requests
 psutil
 python-dotenv
 pytest
+pyarrow
+huggingface_hub

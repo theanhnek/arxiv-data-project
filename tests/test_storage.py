@@ -253,3 +253,155 @@ def test_write_jsonl_atomic_counts_rows_and_cleans_up_on_error(tmp_path):
         write_jsonl_atomic(path, broken())
     assert path.read_text(encoding="utf-8").count("\n") == 3  # old content intact
     assert sorted(p.name for p in tmp_path.iterdir()) == ["rows.jsonl"]
+
+
+# --------------------------------------------------------------------------- #
+# Parquet export (needs pyarrow)
+# --------------------------------------------------------------------------- #
+
+
+def _papers_and_refs(config, n_papers=3):
+    write_discovery(
+        config,
+        [
+            {
+                "arxiv_id": f"2410.{13025 + i}",
+                "status": "resolved",
+                "title": f"Paper {i}",
+                "authors": ["A", "B"] if i == 0 else [],
+                "submission_date": "2024-10-17T10:00:00Z",
+                "revised_dates": [],
+                "venue": None,
+            }
+            for i in range(n_papers)
+        ],
+    )
+    for i in range(n_papers):
+        save_references_cache(
+            config,
+            cache_record(f"2410.{13025 + i}", [reference(1, "1706.03762", title="Tiêu đề")]),
+        )
+
+
+def test_export_parquet_writes_sharded_tables_that_round_trip(tmp_path):
+    pq = pytest.importorskip("pyarrow.parquet")
+    from src.storage import export_parquet
+
+    config = make_config(tmp_path)
+    _papers_and_refs(config, 3)
+    result = export_parquet(config, shard_rows=2)
+
+    assert result["papers_rows"] == 3 and result["references_rows"] == 3
+    names = sorted(Path(p).name for p in result["papers_shards"])
+    assert names == ["train-00000-of-00002.parquet", "train-00001-of-00002.parquet"]
+
+    rows = []
+    for shard in sorted(result["papers_shards"]):
+        rows += pq.read_table(shard).to_pylist()
+    assert [r["arxiv_id"] for r in rows] == ["2410.13025", "2410.13026", "2410.13027"]
+    assert rows[0]["authors"] == ["A", "B"] and rows[1]["authors"] == []
+    assert rows[0]["venue"] is None and rows[0]["revised_dates"] == []
+
+    refs = pq.read_table(result["references_shards"][0]).to_pylist()
+    assert refs[0]["ref_arxiv_id"] == "1706.03762" and refs[0]["ref_title"] == "Tiêu đề"
+    assert refs[0]["ref_authors"] == ["Author 1"] and refs[0]["ref_submission_date"] is None
+    assert not any(config.output_dir.rglob("*.tmp"))
+
+
+def test_export_parquet_empty_tables_keep_their_schema(tmp_path):
+    pq = pytest.importorskip("pyarrow.parquet")
+    from src.storage import PAPERS_COLUMNS, REFERENCES_COLUMNS, export_parquet
+
+    config = make_config(tmp_path)
+    write_discovery(config, [])
+    result = export_parquet(config)
+    assert result["papers_rows"] == 0 and len(result["papers_shards"]) == 1
+    assert tuple(pq.read_table(result["papers_shards"][0]).column_names) == PAPERS_COLUMNS
+    assert (
+        tuple(pq.read_table(result["references_shards"][0]).column_names) == REFERENCES_COLUMNS
+    )
+
+
+def test_export_parquet_rerun_removes_stale_shards(tmp_path):
+    pytest.importorskip("pyarrow")
+    from src.storage import export_parquet
+
+    config = make_config(tmp_path)
+    _papers_and_refs(config, 3)
+    export_parquet(config, shard_rows=1)
+    folder = config.output_dir / "export" / "parquet" / "data" / "papers"
+    assert len(list(folder.glob("*.parquet"))) == 3
+    export_parquet(config, shard_rows=10)
+    assert [p.name for p in folder.glob("*.parquet")] == ["train-00000-of-00001.parquet"]
+
+
+def test_failed_parquet_write_keeps_previous_shards(tmp_path, monkeypatch):
+    pq = pytest.importorskip("pyarrow.parquet")
+    from src.storage import export_parquet
+
+    config = make_config(tmp_path)
+    _papers_and_refs(config, 2)
+    export_parquet(config)
+    folder = config.output_dir / "export" / "parquet" / "data" / "papers"
+    before = sorted(p.name for p in folder.glob("*"))
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pq, "write_table", boom)
+    with pytest.raises(OSError):
+        export_parquet(config, shard_rows=1)
+    assert sorted(p.name for p in folder.glob("*")) == before
+
+
+def test_export_parquet_writes_dataset_card_once_and_rejects_bad_shard_size(tmp_path):
+    pytest.importorskip("pyarrow")
+    from src.storage import export_parquet, write_parquet_shards
+
+    config = make_config(tmp_path)
+    write_discovery(config, [])
+    export_parquet(config)
+    card = config.output_dir / "export" / "parquet" / "README.md"
+    assert "config_name: papers" in card.read_text(encoding="utf-8")
+    card.write_text("edited by hand", encoding="utf-8")
+    export_parquet(config)
+    assert card.read_text(encoding="utf-8") == "edited by hand"
+    with pytest.raises(ValueError):
+        write_parquet_shards([], ("arxiv_id",), tmp_path / "x", shard_rows=0)
+
+
+def test_main_export_parquet_flag_writes_shards(monkeypatch, tmp_path):
+    pytest.importorskip("pyarrow")
+    import sys
+
+    import src.main as main_module
+
+    config = make_config(tmp_path)
+    write_discovery(config, [])
+    monkeypatch.setattr(
+        sys, "argv", ["src.main", "--export-parquet", "--output", str(config.output_dir)]
+    )
+    main_module.main()
+    assert list((config.output_dir / "export" / "parquet" / "data" / "papers").glob("*.parquet"))
+
+
+def test_parquet_layout_and_non_null_columns_follow_the_specification(tmp_path):
+    pq = pytest.importorskip("pyarrow.parquet")
+    from src.storage import export_parquet
+
+    config = make_config(tmp_path)
+    _papers_and_refs(config, 1)
+    result = export_parquet(config)
+    root = config.output_dir / "export" / "parquet"
+    assert (root / "README.md").is_file()
+    assert (root / "data" / "papers").is_dir() and (root / "data" / "references").is_dir()
+    assert 'data_files: "data/references/*.parquet"' in (root / "README.md").read_text(
+        encoding="utf-8"
+    )
+    papers_schema = pq.read_schema(result["papers_shards"][0])
+    refs_schema = pq.read_schema(result["references_shards"][0])
+    assert papers_schema.field("arxiv_id").nullable is False
+    assert papers_schema.field("title").nullable is True
+    assert refs_schema.field("arxiv_id").nullable is False
+    assert refs_schema.field("ref_arxiv_id").nullable is False
+    assert str(papers_schema.field("authors").type) == "list<element: string>"

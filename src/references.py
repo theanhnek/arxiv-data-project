@@ -22,8 +22,9 @@ Rules implemented here:
 * Outcomes are distinguished: ``success``, ``empty_references`` (API answered with zero
   references), ``not_found`` (HTTP 404) and ``failed`` (request or payload problem). These
   names are the ones ``src/metrics.py`` reads from ``state/references.json``.
-* A submission date is never fabricated from a publication year or date: the field
-  ``submission_date`` of a reference stays ``None`` until an arXiv date is known.
+* ``submission_date`` of a reference is Semantic Scholar's ``publicationDate`` (the
+  course staff accepted this for the ``ref_submission_date`` column). It is never
+  guessed from the bare ``year``: with no ``publicationDate`` it stays ``None``.
 * The API is paged through the dedicated ``/paper/{id}/references`` endpoint
   (``offset``/``limit``/``next``) so a long reference list is never silently cut.
 
@@ -208,7 +209,8 @@ def normalize_reference(item: Any, index: int) -> Optional[Dict[str, Any]]:
     """Convert one API item (``{"citedPaper": {...}}`` or a bare paper) to a flat record.
 
     Returns ``None`` for items without a usable paper object. Unknown values are
-    ``None`` or empty, never guessed; ``submission_date`` is always ``None`` here.
+    ``None`` or empty, never guessed; ``submission_date`` copies ``publicationDate``
+    (``None`` when Semantic Scholar has none; the bare ``year`` is never used).
     """
     paper = item.get("citedPaper") if isinstance(item, dict) and "citedPaper" in item else item
     if not isinstance(paper, dict):
@@ -236,8 +238,9 @@ def normalize_reference(item: Any, index: int) -> Optional[Dict[str, Any]]:
         "arxiv_id_raw": arxiv_raw if isinstance(arxiv_raw, str) else None,
         "doi": _clean_text(external.get("DOI")),
         "external_ids": external,
-        # Filled only from arXiv metadata. Never derived from year/publicationDate.
-        "submission_date": None,
+        # Course staff: ref_submission_date may use Semantic Scholar's publication date.
+        # The bare year is never turned into a date.
+        "submission_date": _clean_text(paper.get("publicationDate")),
     }
 
 

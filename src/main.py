@@ -18,7 +18,7 @@ from .downloader import download_discovered_sources
 from .extractor import extract_downloaded_sources
 from .metrics import ResourceMonitor, compute_pipeline_metrics
 from .references import collect_references
-from .storage import export_tables
+from .storage import DEFAULT_SHARD_ROWS, export_parquet, export_tables
 
 
 def main() -> None:
@@ -80,6 +80,17 @@ def main() -> None:
         help="Write the final papers and references tables to <output>/export/*.jsonl",
     )
     parser.add_argument(
+        "--export-parquet",
+        action="store_true",
+        help="Write sharded Parquet tables to <output>/export/parquet/ for the Hugging Face upload",
+    )
+    parser.add_argument(
+        "--shard-rows",
+        type=int,
+        default=DEFAULT_SHARD_ROWS,
+        help="Maximum rows per Parquet shard (default: %(default)s)",
+    )
+    parser.add_argument(
         "--metrics",
         action="store_true",
         help="Monitor RAM/Disk/Runtime and write benchmark_summary.json + per_paper_metrics.json",
@@ -96,11 +107,12 @@ def main() -> None:
         and not args.extract
         and not args.references
         and not args.export
+        and not args.export_parquet
         and not args.metrics
     ):
         parser.error(
             "Choose --init, --discover (--ids FILE or --range ...), --download, --extract, "
-            "--references, --export, or --metrics"
+            "--references, --export, --export-parquet, or --metrics"
         )
     if args.discover and args.ids is None and args.range is None:
         parser.error(
@@ -108,6 +120,8 @@ def main() -> None:
         )
     if args.timeout <= 0 or args.attempts < 1:
         parser.error("Timeout must be positive; attempts must be >= 1")
+    if args.shard_rows < 1:
+        parser.error("--shard-rows must be >= 1")
 
     try:
         from dotenv import load_dotenv
@@ -190,6 +204,7 @@ def main() -> None:
             not args.extract
             and not args.references
             and not args.export
+            and not args.export_parquet
             and not args.init
             and not args.metrics
         ):
@@ -220,6 +235,13 @@ def main() -> None:
             except FileNotFoundError as exc:
                 parser.error(str(exc))
             print(exported)
+
+        if args.export_parquet:
+            try:
+                parquet = export_parquet(config, shard_rows=args.shard_rows)
+            except (FileNotFoundError, RuntimeError) as exc:
+                parser.error(str(exc))
+            print(parquet)
     finally:
         if client is not None:
             client.close()

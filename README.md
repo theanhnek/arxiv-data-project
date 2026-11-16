@@ -123,6 +123,15 @@ Chỉ cần có `data/state/discovery.json` (không phụ thuộc Download/Extra
 
 Thử nhanh với một bài trước khi chạy cả dải: `.\.venv\Scripts\python.exe -m src.references --arxiv-id 1706.03762 --output data/smoke`. Chi tiết, schema và hạn chế: [docs/references.md](docs/references.md).
 
+**Xuất Parquet và nộp Hugging Face (mỗi thành viên tự làm cho phần dữ liệu của mình).** Chuyển hai bảng sang Parquet chia shard, rồi upload thành dataset công khai dưới tài khoản Hugging Face cá nhân. Token có quyền ghi đặt trong biến môi trường `HF_TOKEN` (hoặc `.env`), không commit token lên repo:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --export-parquet --output data
+.\.venv\Scripts\python.exe -m src.hf_upload --repo-id <ten-tai-khoan>/<ten-dataset> --output data
+```
+
+Lệnh upload in ra link công khai của dataset để dán vào Moodle.
+
 ### 7. Bước 5 — Đo đạc Metrics & Hiệu năng
 
 Tổng hợp các chỉ số hiệu năng và tài nguyên từ các bước trước:
@@ -174,6 +183,7 @@ Xem toàn bộ tùy chọn:
 - `data/state/references.json`: kết quả references từng bài (`success`, `empty_references`, `not_found`, `failed`), số reference và thống kê.
 - `data/corpus/<paper_id>/references.json`: toàn bộ reference của bài (cấp publication, áp dụng cho mọi version), gồm cả reference không có arXiv ID và phản hồi thô.
 - `data/export/papers.jsonl`, `data/export/references.jsonl`: hai bảng cuối (`references` chỉ gồm reference có arXiv ID).
+- `data/export/parquet/`: repo Hugging Face dạng Parquet chia shard (`--export-parquet`): `README.md` và `data/{papers,references}/train-*-of-*.parquet`.
 
 ## Cấu trúc repository
 
@@ -210,7 +220,7 @@ Thư mục `data/` được tạo cục bộ khi chạy và được loại kh�
 Chạy toàn bộ các kiểm tra tự động offline (không gửi request thật đến arXiv):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py tests/test_storage.py tests/test_references.py tests/test_metrics.py -v --basetemp data/test-suite
+.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py tests/test_storage.py tests/test_references.py tests/test_hf_upload.py tests/test_metrics.py -v --basetemp data/test-suite
 ```
 
 ## Schema và giới hạn hiện tại
@@ -235,4 +245,4 @@ Corpus được nhóm lưu để sử dụng cho các milestone sau. Milestone 1
 - [arXiv API User Manual](https://info.arxiv.org/help/api/user-manual.html)
 - [arXiv API Terms of Use](https://info.arxiv.org/help/api/tou.html)
 - [Project Problem Statements](https://hcmus-cs-ta.github.io/lab-book/intro-ds/statement/)
-- References lấy ở mức publication từ Semantic Scholar, không phân biệt version. `ref_submission_date` để trống cho tới khi có ngày nộp từ metadata arXiv (không dùng `publicationDate`/`year` thay thế).
+- References lấy ở mức publication từ Semantic Scholar, không phân biệt version. `ref_submission_date` lấy từ `publicationDate` của Semantic Scholar (giảng viên cho phép), để trống khi API không có; không suy ra từ `year`.
