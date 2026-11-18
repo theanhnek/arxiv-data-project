@@ -173,7 +173,19 @@ data/
 
 ---
 
-## 5. Cấu trúc mã nguồn
+### Hướng dẫn xuất Parquet và nộp Hugging Face
+Chuyển hai bảng sang Parquet chia shard, rồi upload thành dataset công khai dưới tài khoản Hugging Face cá nhân. Token có quyền ghi đặt trong biến môi trường `HF_TOKEN` (hoặc `.env`), không commit token lên repo:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --export-parquet --output data
+.\.venv\Scripts\python.exe -m src.hf_upload --repo-id <ten-tai-khoan>/<ten-dataset> --output data
+```
+
+Lệnh upload in ra link công khai của dataset để dán vào Moodle.
+
+---
+
+## 5. Cấu trúc repository
 
 ```text
 arxiv-data-project/
@@ -202,8 +214,12 @@ arxiv-data-project/
 
 Dự án đi kèm bộ 84 kiểm thử tự động offline (dùng mock data, không gọi request thật ra ngoài mạng):
 
-```bash
-python -m pytest tests/ -v
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/ -v
+```
+Hoặc chạy chi tiết từng bài kiểm tra:
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_discovery.py tests/test_downloader.py tests/test_extractor.py tests/test_storage.py tests/test_references.py tests/test_hf_upload.py tests/test_metrics.py -v --basetemp data/test-suite
 ```
 
 ---
@@ -213,3 +229,19 @@ python -m pytest tests/ -v
 Báo cáo kết quả và thống kê chi tiết được xây dựng bằng Jupyter Book và triển khai tự động qua GitHub Pages tại repository riêng:
 - **Repository báo cáo**: [kilabeobeo72/arxiv-data-report](https://github.com/kilabeobeo72/arxiv-data-report)
 - Toàn bộ bảng biểu và biểu đồ hiệu năng trong báo cáo được sinh tự động bằng mã Python từ các file `data/metrics/*.json` khi biên dịch sách.
+
+---
+
+## 8. Ghi chú kỹ thuật & Hạn chế
+- Metadata được lấy ở mức publication theo phiên bản mới nhất, chưa phải metadata riêng cho mỗi revision.
+- `latest_updated_date` là thời điểm cập nhật mới nhất. `revised_dates` chưa có lịch sử đầy đủ khi `revision_dates_complete` là `false`.
+- `venue` hiện lấy từ journal reference của arXiv và chưa được chuẩn hóa thành tên venue riêng.
+- Discovery và Downloader sử dụng chung cơ chế request tuần tự với khoảng cách ít nhất 3 giây (`ArxivClient`).
+- Quá trình Extraction lọc bỏ tất cả file không có đuôi `.tex` hoặc `.bib` (như file ảnh `.png`, `.jpg`, `.pdf`, `.eps`), giữ nguyên cấu trúc thư mục con và bảo toàn từng byte của file nguồn.
+- Module Metrics tự động tổng hợp số liệu kể cả khi module references của Thành viên 4 chưa hoàn thành (được đánh dấu `references.available = false`).
+- References lấy ở mức publication từ Semantic Scholar, không phân biệt version. `ref_submission_date` lấy từ `publicationDate` của Semantic Scholar (giảng viên cho phép), để trống khi API không có; không suy ra từ `year`.
+
+## 9. Tài liệu tham khảo
+- [arXiv API User Manual](https://info.arxiv.org/help/api/user-manual.html)
+- [arXiv API Terms of Use](https://info.arxiv.org/help/api/tou.html)
+- [Project Problem Statements](https://hcmus-cs-ta.github.io/lab-book/intro-ds/statement/)
