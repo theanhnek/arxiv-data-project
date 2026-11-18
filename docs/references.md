@@ -46,6 +46,22 @@ Chạy lại sau khi bị ngắt: thêm `--resume`; các bài đã `success` / `
 .\.venv\Scripts\python.exe -m src.main --export --output data
 ```
 
+### 2.3b Xuất Parquet và upload Hugging Face
+
+Đề yêu cầu mỗi thành viên nộp dataset riêng (bảng Parquet chia shard) trên tài khoản Hugging Face cá nhân:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.main --export-parquet --output data
+$env:HF_TOKEN = "<token có quyền write>"
+.\.venv\Scripts\python.exe -m src.hf_upload --repo-id <ten-tai-khoan>/<ten-dataset> --output data
+```
+
+- Thư mục `data/export/parquet/` có đúng cấu trúc repo Hugging Face theo đề: `README.md` (dataset card khai báo config) và `data/papers/*.parquet`, `data/references/*.parquet` với tên shard dạng `train-00000-of-0000N.parquet`; `--shard-rows` đặt số dòng tối đa mỗi shard (mặc định 50.000).
+- Cột danh sách (`authors`, `revised_dates`, `ref_authors`) lưu dạng `list<string>`; `arxiv_id` và `ref_arxiv_id` không cho null theo đề, các cột còn lại là chuỗi cho phép null.
+- `README.md` ở gốc khai báo hai config `papers` và `references`; file chỉ được tạo khi chưa tồn tại. Khi thêm các bảng Milestone 2 và 3 (`elements`, `hierarchy`, `bibtex`, `predictions`) vào cùng thư mục `data/`, cần bổ sung config tương ứng vào file này.
+- Dataset tạo ở chế độ công khai (đề yêu cầu link công khai). Không commit token vào repo; module chỉ đọc `HF_TOKEN`.
+- Đề Milestone 3 liệt kê 6 bảng cuối: `papers`, `references` (Milestone 1), `elements`, `hierarchy`, `bibtex` (Milestone 2) và `predictions` (Milestone 3); không có bảng `statements`.
+
 ### 2.4 Chạy gộp với các bước khác và đo hiệu năng
 
 ```powershell
@@ -75,6 +91,7 @@ Chạy lại sau khi bị ngắt: thêm `--resume`; các bài đã `success` / `
 - `paper_dirname`, `paper_dir`, `references_cache_path`: ánh xạ ID → thư mục bằng đúng `safe_paper_dirname` của Downloader (`2410.13025` → `2410-13025`, `hep-th/9901001` → `hep-th-9901001`).
 - `load_references_cache`, `save_references_cache`: chỉ lưu kết quả **chắc chắn** (`success`, `empty_references`, `not_found`); kết quả `failed` không bao giờ được lưu để không đè dữ liệu tốt của lần chạy trước.
 - `build_papers_rows`, `build_references_rows`, `export_tables`: xuất hai bảng theo đặc tả Milestone 1.
+- `write_parquet_shards`, `export_parquet`: xuất hai bảng dạng Parquet chia shard (cần `pyarrow`); `src/hf_upload.py` upload lên Hugging Face (cần `huggingface_hub`).
 
 ---
 
@@ -94,7 +111,7 @@ Mỗi phần tử `references` (giữ **toàn bộ**, kể cả reference không
 | `publication_date` | `publicationDate` của Semantic Scholar, **không phải** ngày nộp arXiv |
 | `arxiv_id` | ID arXiv chuẩn hóa (bỏ hậu tố version, giữ dạng cũ `hep-th/9901001`); `None` nếu không có |
 | `arxiv_id_raw` | giá trị gốc API trả về |
-| `submission_date` | luôn `None` cho đến khi có ngày nộp từ metadata arXiv |
+| `submission_date` | bằng `publicationDate` của Semantic Scholar (giảng viên cho phép dùng cho `ref_submission_date`); `None` nếu API không có `publicationDate`, không bao giờ suy ra từ `year` |
 | `external_ids` | toàn bộ `externalIds` |
 
 `raw_pages` giữ nguyên các trang phản hồi thô để kiểm tra lại.
@@ -133,7 +150,7 @@ Mỗi phần tử `papers`: `arxiv_id`, `safe_id`, `status`, `total_references_c
 3. **Thử lại.** 429, 5xx và lỗi mạng: tối đa `--attempts` lần, backoff lũy thừa và tôn trọng `Retry-After` (tối đa 300 giây). HTTP 401/403 dừng cả lượt chạy ngay (khóa sai), báo `aborted`, thoát với mã 1.
 4. **Ước lượng thời gian** (giả định ~1 request/bài, chưa đo thực tế): 5.000 bài ≈ **4,3 giờ** không có khóa, ≈ **1,4 giờ** có khóa. Bài có trên 500 reference cần thêm trang. Nên xin khóa miễn phí trước khi chạy.
 5. **Không phân biệt version.** Dữ liệu là cấp bài. Semantic Scholar có thể chưa lập chỉ mục bài mới trong 1–7 ngày (khi đó `not_found` hoặc `empty_references`); dùng `--retry-not-found` để hỏi lại.
-6. **`ref_submission_date` hiện luôn rỗng.** Theo `plan.md`, không được dùng `publicationDate` hoặc `year` của Semantic Scholar thay cho ngày nộp arXiv. `publication_date` được lưu riêng. Muốn có ngày nộp phải bổ sung từ metadata arXiv (chưa triển khai); độ phủ `submission_date` trong báo cáo sẽ là 0 cho tới khi nhóm quyết định.
+6. **`ref_submission_date` là ngày công bố của Semantic Scholar, không phải ngày nộp arXiv.** Giảng viên cho phép dùng `publication_date` của S2 cho cột này (hoặc tra ngược theo arXiv ID, chưa triển khai). Có thể lệch vài ngày hoặc vài tháng so với ngày nộp thật, và để trống khi API không có `publicationDate`; bài báo cáo nên nêu rõ hạn chế này.
 7. **ID kiểu cũ** (`hep-th/9901001`) được giữ nguyên ở reference. Việc truy vấn chính các bài có ID kiểu cũ chưa được kiểm thử với API thật (dải phân công hiện nay chỉ có ID mới).
 8. **Độ tin cậy dữ liệu.** Semantic Scholar tự trích xuất reference nên có thể thiếu hoặc nhầm; ghi rõ trong báo cáo. Tỷ lệ reference có arXiv ID phụ thuộc lĩnh vực.
 9. **Bảo mật.** Khóa API chỉ đọc từ `.env`/biến môi trường, không ghi vào file dữ liệu hay log, và bị ẩn khỏi `repr` của `CrawlConfig`.

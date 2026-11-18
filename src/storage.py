@@ -57,6 +57,12 @@ REFERENCES_COLUMNS = (
     "ref_s2_id",
 )
 
+# Columns that hold a list of strings; every other column is a (nullable) string.
+LIST_COLUMNS = frozenset({"authors", "revised_dates", "ref_authors"})
+# Declared non-null by the Milestone 3 table specification.
+NON_NULL_COLUMNS = frozenset({"arxiv_id", "ref_arxiv_id"})
+DEFAULT_SHARD_ROWS = 50_000
+
 
 # --------------------------------------------------------------------------- #
 # Atomic persistence
@@ -267,7 +273,8 @@ def export_tables(
 ) -> Dict[str, Any]:
     """Write ``papers.jsonl`` and ``references.jsonl`` and return their row counts.
 
-    JSON Lines needs no extra dependency; Milestone 3 converts to sharded Parquet.
+    JSON Lines needs no extra dependency; ``export_parquet`` writes the sharded
+    Parquet tables that are uploaded to Hugging Face.
     """
     target = Path(export_dir) if export_dir else config.output_dir / "export"
     papers_rows = build_papers_rows(config, discovery_file=discovery_file)
@@ -281,4 +288,127 @@ def export_tables(
         "references_rows": len(reference_rows),
         "papers_path": str(papers_path),
         "references_path": str(references_path),
+    }
+
+
+_DATASET_CARD = """---
+configs:
+- config_name: papers
+  data_files: "data/papers/*.parquet"
+- config_name: references
+  data_files: "data/references/*.parquet"
+---
+
+# arXiv papers and references
+
+Tables exported by the group 14 pipeline for the assigned arXiv ID range.
+
+- `papers`: arxiv_id, title, authors, submission_date, revised_dates, venue
+- `references`: arxiv_id, ref_arxiv_id, ref_title, ref_authors, ref_submission_date, ref_s2_id
+
+Only references that carry an arXiv ID are listed in `references`.
+"""
+
+
+def _require_pyarrow():
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise RuntimeError(
+            "Parquet export needs pyarrow: pip install pyarrow (see src/requirements.txt)"
+        ) from exc
+    return pa, pq
+
+
+def write_parquet_shards(
+    rows: List[Dict[str, Any]],
+    columns: Iterable[str],
+    directory: Path,
+    *,
+    shard_rows: int = DEFAULT_SHARD_ROWS,
+    prefix: str = "train",
+) -> List[Path]:
+    """Write ``rows`` as ``<prefix>-00000-of-0000N.parquet`` files in ``directory``.
+
+    An empty table still produces one shard so the schema is preserved. Shards are
+    written to temporary names first and the previous run's shards are removed only
+    after every new shard exists, so an interrupted export never leaves a mix of old
+    and new files with inconsistent ``of-N`` counts.
+    """
+    if shard_rows < 1:
+        raise ValueError("shard_rows must be >= 1")
+    pa, pq = _require_pyarrow()
+    columns = tuple(columns)
+    schema = pa.schema(
+        [
+            pa.field(
+                c,
+                pa.list_(pa.string()) if c in LIST_COLUMNS else pa.string(),
+                nullable=c not in NON_NULL_COLUMNS,
+            )
+            for c in columns
+        ]
+    )
+    chunks = [rows[i : i + shard_rows] for i in range(0, len(rows), shard_rows)] or [[]]
+    total = len(chunks)
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    staged: List[tuple] = []
+    try:
+        for index, chunk in enumerate(chunks):
+            final = directory / f"{prefix}-{index:05d}-of-{total:05d}.parquet"
+            tmp = final.with_name(final.name + ".tmp")
+            table = pa.Table.from_pylist(
+                [{c: row.get(c) for c in columns} for row in chunk], schema=schema
+            )
+            pq.write_table(table, tmp)
+            staged.append((tmp, final))
+    except BaseException:
+        for tmp, _ in staged:
+            tmp.unlink(missing_ok=True)
+        raise
+    for old in directory.glob("*.parquet"):
+        old.unlink()
+    for tmp, final in staged:
+        os.replace(tmp, final)
+    return [final for _, final in staged]
+
+
+def export_parquet(
+    config: CrawlConfig,
+    *,
+    export_dir: Optional[Path] = None,
+    discovery_file: Optional[Path] = None,
+    shard_rows: int = DEFAULT_SHARD_ROWS,
+) -> Dict[str, Any]:
+    """Write sharded Parquet tables laid out like the Hugging Face dataset repository.
+
+    ``<export>/parquet/`` is the repository root: ``data/papers/*.parquet``,
+    ``data/references/*.parquet`` and a ``README.md`` dataset card (written only if
+    none exists) that declares one config per table. Uploading that folder as is gives
+    the structure required by the Milestone 3 specification.
+    """
+    root = (Path(export_dir) if export_dir else config.output_dir / "export") / "parquet"
+    papers_rows = build_papers_rows(config, discovery_file=discovery_file)
+    reference_rows = build_references_rows(config, discovery_file=discovery_file)
+    papers_shards = write_parquet_shards(
+        papers_rows, PAPERS_COLUMNS, root / "data" / "papers", shard_rows=shard_rows
+    )
+    reference_shards = write_parquet_shards(
+        reference_rows,
+        REFERENCES_COLUMNS,
+        root / "data" / "references",
+        shard_rows=shard_rows,
+    )
+    card = root / "README.md"
+    if not card.exists():
+        card.write_text(_DATASET_CARD, encoding="utf-8")
+    return {
+        "papers_rows": len(papers_rows),
+        "references_rows": len(reference_rows),
+        "papers_shards": [str(p) for p in papers_shards],
+        "references_shards": [str(p) for p in reference_shards],
+        "folder": str(root),
     }
