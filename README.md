@@ -140,7 +140,13 @@ python -m src.main --references --output data --resume
 # 6. Bước Export (Xuất 2 bảng chuẩn papers.jsonl và references.jsonl)
 python -m src.main --export --output data
 
-# 7. Bước Metrics (Tổng hợp số liệu benchmark, tỷ lệ tiết kiệm dung lượng)
+# 7. Bước Export Parquet (Xuất Parquet chia shard cho Hugging Face)
+python -m src.main --export-parquet --output data
+
+# 8. Bước Upload Hugging Face (Tải dataset lên repo cá nhân)
+python -m src.hf_upload --repo-id <username>/<dataset-name> --output data
+
+# 9. Bước Metrics (Tổng hợp số liệu benchmark, tỷ lệ tiết kiệm dung lượng)
 python -m src.main --metrics --output data
 ```
 
@@ -196,7 +202,8 @@ arxiv-data-project/
 │   ├── downloader.py           # Module tải gói nguồn các phiên bản từ mirror export.arxiv.org
 │   ├── extractor.py            # Module giải nén an toàn, lọc file .tex/.bib và loại bỏ ảnh
 │   ├── references.py           # Module thu thập trích dẫn từ Semantic Scholar API
-│   ├── storage.py              # Xử lý lưu trữ JSON an toàn và xuất file .jsonl
+│   ├── storage.py              # Xử lý lưu trữ JSON an toàn và xuất file .jsonl, .parquet
+│   ├── hf_upload.py            # Module upload dataset lên Hugging Face
 │   ├── metrics.py              # Đo đạc hiệu năng hệ thống (RAM, CPU, thời gian, Disk)
 │   ├── colab_benchmark.ipynb   # Notebook chạy benchmark trên Google Colab CPU-only
 │   └── requirements.txt        # Danh sách thư viện cần thiết
@@ -212,7 +219,7 @@ arxiv-data-project/
 
 ## 6. Kiểm thử tự động (Unit Tests)
 
-Dự án đi kèm bộ 84 kiểm thử tự động offline (dùng mock data, không gọi request thật ra ngoài mạng):
+Dự án đi kèm bộ 94 kiểm thử tự động offline (dùng mock data, không gọi request thật ra ngoài mạng):
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/ -v
