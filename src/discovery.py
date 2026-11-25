@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
+import shutil
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 import xml.etree.ElementTree as ET
@@ -430,11 +432,18 @@ class ArxivClient:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     temporary.write_text(
         json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    temporary.replace(path)
+    for attempt in range(10):
+        try:
+            temporary.replace(path)
+            return
+        except (PermissionError, OSError):
+            if attempt == 9:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def discover_papers(
@@ -448,6 +457,11 @@ def discover_papers(
     path = config.output_dir / "state" / "discovery.json"
     cached: Dict[str, Dict[str, Any]] = {}
     if resume and path.exists():
+        backup_path = path.with_suffix(".json.bak")
+        try:
+            shutil.copy2(path, backup_path)
+        except OSError:
+            pass
         previous = json.loads(path.read_text(encoding="utf-8"))
         cached = {
             p["arxiv_id"]: p
@@ -466,7 +480,8 @@ def discover_papers(
         total_bases = len(bases)
         for idx, base in enumerate(bases, 1):
             paper_start = time.monotonic()
-            if base in cached:
+            is_cache_hit = base in cached
+            if is_cache_hit:
                 record = dict(cached[base], cache_hit=True)
                 print(f"[Discovery {idx}/{total_bases}] {base}: cached ({record.get('latest_version', 1)} versions)")
             else:
@@ -495,7 +510,8 @@ def discover_papers(
             record["discovery_seconds"] = time.monotonic() - paper_start
             report["papers"].append(record)
             report["elapsed_seconds"] = time.monotonic() - started
-            write_json(path, report)
+            if not is_cache_hit or idx % 100 == 0 or idx == total_bases:
+                write_json(path, report)
     finally:
         if owned:
             client.close()
