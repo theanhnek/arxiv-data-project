@@ -6,15 +6,14 @@ import argparse
 import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
-
+from typing import Any, Dict, Iterable, List, Optional
 
 MEMBERS = (
-    ("Kiet", "Kiệt", "2024-10 #18025–23024"),
-    ("Duong", "Dương", "2024-10 #13025–18024"),
-    ("Ha", "Hà", "2024-10 #8025–13024"),
-    ("Kien", "Kiên", "2024-10 #3025–8024"),
-    ("Anh", "Anh", "2024-09 #18594 to 2024-10 #3024"),
+    ("Kiet", "Kiệt", "2025-10 #14401–19400"),
+    ("Duong", "Dương", "2025-10 #9401–14400"),
+    ("Ha", "Hà", "2025-10 #4401–9400"),
+    ("Kien", "Kiên", "2025-09 #26047 to 2025-10 #4400"),
+    ("Anh", "Anh", "2025-09 #11047–16046"),
 )
 
 COLUMNS = (

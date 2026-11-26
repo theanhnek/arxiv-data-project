@@ -49,7 +49,11 @@ $env:HF_TOKEN="hf_your_personal_token_here"
    ```powershell
    .\.venv\Scripts\python.exe -m src.main --export-parquet --output data
    ```
-2. Chạy script kiểm tra chất lượng dữ liệu của Người 3 (đảm bảo không trùng ID, không thiếu cột, đúng dải bài được phân công).
+2. Chạy script kiểm tra chất lượng dữ liệu trước khi upload (đảm bảo không trùng ID, không thiếu cột, đúng dải bài được phân công và đọc lại được bằng `datasets.load_dataset`):
+   ```powershell
+   .\.venv\Scripts\python.exe scripts/validate_hf_dataset.py --dataset-dir data/export/parquet --member <Kiet|Duong|Ha|Kien|Anh>
+   ```
+   *(Xem chi tiết trong [docs/hf_validation_guide.md](hf_validation_guide.md)).*
 
 ### Bước 4: Upload dữ liệu lên Hugging Face
 Thực hiện lệnh tải dữ liệu lên repo cá nhân:
