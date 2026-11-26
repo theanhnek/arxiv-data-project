@@ -6,8 +6,7 @@ import argparse
 import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
-
+from typing import Any, Dict, Iterable, List, Optional
 
 MEMBERS = (
     ("Kiet", "Kiệt", "2025-10 #14401–19400"),

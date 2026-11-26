@@ -55,11 +55,11 @@ Theo yêu cầu của đề bài, giảng viên cung cấp dải bài báo đư�
 ### Cách A — Bảng phân công 5 dải của nhóm (`data/assigned_ids.txt`)
 Mỗi dòng là dải 5.000 bài được phân công của một thành viên theo định dạng `start_month  start_id  end_month  end_id`:
 ```text
-2025-10	14401	2025-10	19400    # Thành viên 1: Kiệt (5.000 bài tháng 10)
-2025-10	9401	2025-10	14400    # Thành viên 2: Dương (5.000 bài tháng 10)
-2025-10	4401	2025-10	9400     # Thành viên 3: Hà (5.000 bài tháng 10)
-2025-09	26047	2025-10	4400     # Thành viên 4: Kiên (5.000 bài vắt qua 2 tháng)
-2025-09	11047	2025-09	16046    # Thành viên 5: Anh (5.000 bài tháng 9)
+2025-10	14401	2025-10	19400    # Thành viên 1: Kiệt 
+2025-10	9401	2025-10	14400    # Thành viên 2: Dương 
+2025-10	4401	2025-10	9400     # Thành viên 3: Hà 
+2025-09	26047	2025-10	4400     # Thành viên 4: Kiên 
+2025-09	11047	2025-09	16046    # Thành viên 5: Anh 
 ```
 > Khi chạy với file bảng này, dùng kèm cờ `--member-index (1..5)` để chọn đúng dải của thành viên đó.
 
@@ -142,6 +142,9 @@ python -m src.main --export --output data
 
 # 7. Bước Export Parquet (Xuất Parquet chia shard cho Hugging Face)
 python -m src.main --export-parquet --output data
+
+# 7b. Bước Kiểm tra Dataset trước khi nộp (số dòng, giá trị thiếu, dải ID, trùng lặp, load_dataset)
+python scripts/validate_hf_dataset.py --dataset-dir data/export/parquet --member <Kiet|Duong|Ha|Kien|Anh>
 
 # 8. Bước Upload Hugging Face (Tải dataset lên repo cá nhân)
 python -m src.hf_upload --repo-id <username>/<dataset-name> --output data

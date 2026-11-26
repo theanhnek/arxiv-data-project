@@ -5,3 +5,5 @@ python-dotenv
 pytest
 pyarrow
 huggingface_hub
+datasets
+pyyaml

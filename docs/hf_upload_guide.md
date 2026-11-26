@@ -1,10 +1,4 @@
-# Hướng dẫn Upload Dataset lên Hugging Face & Quy tắc Chạy An toàn
-> **Người phụ trách**: Thành viên 2 (Downloader & HTTP)  
-> **Áp dụng cho**: Toàn bộ thành viên Nhóm 14 khi chạy thu thập và nộp dataset Milestone 1.
-
----
-
-## 1. Quy tắc chạy cào dữ liệu an toàn (Tránh bị khóa IP arXiv & Semantic Scholar)
+# 1. Quy tắc chạy cào dữ liệu an toàn (Tránh bị khóa IP arXiv & Semantic Scholar)
 
 Khi cả nhóm cùng chạy thu thập dữ liệu cho 5.000 bài mỗi người, để không bị hệ thống máy chủ chặn (HTTP 429 Too Many Requests / HTTP 403 Forbidden), các thành viên bắt buộc tuân thủ:
 
@@ -49,7 +43,11 @@ $env:HF_TOKEN="hf_your_personal_token_here"
    ```powershell
    .\.venv\Scripts\python.exe -m src.main --export-parquet --output data
    ```
-2. Chạy script kiểm tra chất lượng dữ liệu của Người 3 (đảm bảo không trùng ID, không thiếu cột, đúng dải bài được phân công).
+2. Chạy script kiểm tra chất lượng dữ liệu trước khi upload (đảm bảo không trùng ID, không thiếu cột, đúng dải bài được phân công và đọc lại được bằng `datasets.load_dataset`):
+   ```powershell
+   .\.venv\Scripts\python.exe scripts/validate_hf_dataset.py --dataset-dir data/export/parquet --member <Kiet|Duong|Ha|Kien|Anh>
+   ```
+   *(Xem chi tiết trong [docs/hf_validation_guide.md](hf_validation_guide.md)).*
 
 ### Bước 4: Upload dữ liệu lên Hugging Face
 Thực hiện lệnh tải dữ liệu lên repo cá nhân:
