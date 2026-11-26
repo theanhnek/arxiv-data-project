@@ -1,7 +1,5 @@
 ## 1. Bảng khoảng ID chính thức của Nhóm 14
 
-> **Lưu ý quan trọng:** Khoảng ID chính thức dưới đây được đối chiếu trực tiếp từ sheet đăng ký môn học **`[NM.KHDL] 24KHDL Project - Team Registration`** (cột H–K, `ID Nhóm = 14`). Mỗi thành viên **chỉ được nộp dữ liệu thuộc đúng dải 5.000 ID của cá nhân mình**.
-
 | Tham số `--member` | MSSV | Thành viên | Khoảng phân công chính thức | Dải arXiv ID (`YYMM.NNNNN`) |
 | :---: | :--- | :--- | :--- | :--- |
 | `Kiet` (hoặc `1`) | `22120171` | Lê Văn Tuấn Kiệt | `2025-10 14401` $\rightarrow$ `2025-10 19400` | `2510.14401` $\rightarrow$ `2510.19400` (5.000 ID) |

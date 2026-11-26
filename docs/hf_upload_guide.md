@@ -1,10 +1,4 @@
-# Hướng dẫn Upload Dataset lên Hugging Face & Quy tắc Chạy An toàn
-> **Người phụ trách**: Thành viên 2 (Downloader & HTTP)  
-> **Áp dụng cho**: Toàn bộ thành viên Nhóm 14 khi chạy thu thập và nộp dataset Milestone 1.
-
----
-
-## 1. Quy tắc chạy cào dữ liệu an toàn (Tránh bị khóa IP arXiv & Semantic Scholar)
+# 1. Quy tắc chạy cào dữ liệu an toàn (Tránh bị khóa IP arXiv & Semantic Scholar)
 
 Khi cả nhóm cùng chạy thu thập dữ liệu cho 5.000 bài mỗi người, để không bị hệ thống máy chủ chặn (HTTP 429 Too Many Requests / HTTP 403 Forbidden), các thành viên bắt buộc tuân thủ:
 
