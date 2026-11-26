@@ -11,7 +11,7 @@ python scripts/aggregate_member_metrics.py --metrics-dir data/team_metrics
 Optional dataset URLs can be added without editing the script, for example:
 
 ```powershell
-python scripts/aggregate_member_metrics.py --metrics-dir data/team_metrics --dataset-url Ha=https://huggingface.co/datasets/hayez0311/arxiv-g14-ha-2025-10-4401-9400
+python scripts/aggregate_member_metrics.py --metrics-dir data/team_metrics --dataset-url Ha=https://huggingface.co/datasets/OWNER/REPO
 ```
 
 The script writes `data/metrics/group_runtime_summary.csv` and `data/metrics/group_runtime_summary.md`. It leaves unavailable metrics blank and labels summed member durations as cumulative processing time rather than group wall time.
@@ -20,8 +20,8 @@ The script writes `data/metrics/group_runtime_summary.csv` and `data/metrics/gro
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | Kiệt | 2025-10 #14401–19400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | Dương | 2025-10 #9401–14400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| **Hà** | **2025-10 #4401–9400** |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| Kiên | 2025-09 #26047 to 2025-10 #4400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| **Hà** | **2025-10 #4401–9400** |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Kiên | 2025-09 #26047 to 2025-10 #4400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | Anh | 2025-09 #11047–16046 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 
 ## Where to get the measurements
