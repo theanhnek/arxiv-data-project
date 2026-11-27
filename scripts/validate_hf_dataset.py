@@ -567,29 +567,46 @@ def _check_load_dataset(
         )
         return result, errors
 
+    import gc
+    import tempfile
+
     result["checked"] = True
-    for table_name in tables_to_check:
-        try:
-            ds = load_dataset(str(dataset_dir.resolve()), name=table_name, split="train")
-            loaded_rows = len(ds)
-            loaded_cols = list(ds.column_names)
-            ok = loaded_rows == expected_rows.get(table_name) and loaded_cols == expected_cols.get(
-                table_name
-            )
-            result["tables"][table_name] = {
-                "ok": ok,
-                "rows_loaded": loaded_rows,
-                "columns_loaded": loaded_cols,
-            }
-            if not ok:
-                errors.append(
-                    f"[load_dataset:{table_name}] Mismatch vs PyArrow: "
-                    f"loaded rows={loaded_rows} (expected {expected_rows.get(table_name)}), "
-                    f"cols={loaded_cols}"
+    # Use a fresh temporary cache directory so Hugging Face `datasets` always reads
+    # the current Parquet shards instead of reusing a stale cache from an earlier export.
+    with tempfile.TemporaryDirectory(
+        prefix="hf_validate_cache_", ignore_cleanup_errors=True
+    ) as tmp_cache:
+        for table_name in tables_to_check:
+            ds = None
+            try:
+                ds = load_dataset(
+                    str(dataset_dir.resolve()),
+                    name=table_name,
+                    split="train",
+                    cache_dir=tmp_cache,
                 )
-        except Exception as exc:
-            result["tables"][table_name] = {"ok": False, "error": str(exc)}
-            errors.append(f"[load_dataset:{table_name}] Failed to load dataset: {exc}")
+                loaded_rows = len(ds)
+                loaded_cols = list(ds.column_names)
+                ok = loaded_rows == expected_rows.get(
+                    table_name
+                ) and loaded_cols == expected_cols.get(table_name)
+                result["tables"][table_name] = {
+                    "ok": ok,
+                    "rows_loaded": loaded_rows,
+                    "columns_loaded": loaded_cols,
+                }
+                if not ok:
+                    errors.append(
+                        f"[load_dataset:{table_name}] Mismatch vs PyArrow: "
+                        f"loaded rows={loaded_rows} (expected {expected_rows.get(table_name)}), "
+                        f"cols={loaded_cols}"
+                    )
+            except Exception as exc:
+                result["tables"][table_name] = {"ok": False, "error": str(exc)}
+                errors.append(f"[load_dataset:{table_name}] Failed to load dataset: {exc}")
+            finally:
+                del ds
+                gc.collect()
 
     return result, errors
 
