@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+
 MEMBERS = (
     ("Kiet", "Kiệt", "2025-10 #14401–19400"),
     ("Duong", "Dương", "2025-10 #9401–14400"),

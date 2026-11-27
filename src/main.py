@@ -1,4 +1,4 @@
-"""Initialize local folders, discover assigned papers, download identified versions, extract LaTeX sources, collect references, export tables, and compute metrics."""
+"""Initialize local folders, discover assigned papers, download identified versions, extract LaTeX sources, collect references, export tables, parse Milestone 2 tables, run Milestone 3 matching, and compute metrics."""
 
 import argparse
 import os
@@ -85,6 +85,16 @@ def main() -> None:
         help="Write sharded Parquet tables to <output>/export/parquet/ for the Hugging Face upload",
     )
     parser.add_argument(
+        "--parse",
+        action="store_true",
+        help="Milestone 2: Parse extracted TeX/BibTeX into elements, hierarchy, and bibtex Parquet tables",
+    )
+    parser.add_argument(
+        "--match",
+        action="store_true",
+        help="Milestone 3: Build automatic/manual predictions, train logistic candidate ranker, and promote predictions",
+    )
+    parser.add_argument(
         "--shard-rows",
         type=int,
         default=DEFAULT_SHARD_ROWS,
@@ -98,7 +108,7 @@ def main() -> None:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run full end-to-end pipeline: discover -> download -> extract -> references -> export -> metrics",
+        help="Run full Milestone 1 end-to-end pipeline: discover -> download -> extract -> references -> export -> metrics",
     )
     parser.add_argument("--resume", action="store_true", help="Reuse successful snapshots")
     parser.add_argument("--timeout", type=float, default=60)
@@ -121,11 +131,13 @@ def main() -> None:
         and not args.references
         and not args.export
         and not args.export_parquet
+        and not args.parse
+        and not args.match
         and not args.metrics
     ):
         parser.error(
             "Choose --init, --discover (--ids FILE or --range ...), --download, --extract, "
-            "--references, --export, --export-parquet, or --metrics"
+            "--references, --export, --export-parquet, --parse, --match, or --metrics"
         )
     if args.discover and args.ids is None and args.range is None:
         parser.error(
@@ -218,6 +230,8 @@ def main() -> None:
             and not args.references
             and not args.export
             and not args.export_parquet
+            and not args.parse
+            and not args.match
             and not args.init
             and not args.metrics
         ):
@@ -255,6 +269,48 @@ def main() -> None:
             except (FileNotFoundError, RuntimeError) as exc:
                 parser.error(str(exc))
             print(parquet)
+
+        if args.parse:
+            from scripts.build_milestone2_tables import main as parse_m2_main
+
+            m2_code = parse_m2_main(
+                ["--output", str(args.output), "--shard-rows", str(args.shard_rows)]
+            )
+            if m2_code != 0:
+                exit_code = 1
+
+        if args.match:
+            from scripts.build_automatic_predictions import main as auto_pred_main
+            from scripts.build_manual_predictions import main as manual_pred_main
+            from scripts.promote_model_predictions import main as promote_main
+            from scripts.train_matcher import main as train_main
+
+            import sys
+
+            old_argv = sys.argv
+            try:
+                sys.argv = [
+                    "build_automatic_predictions.py",
+                    "--output",
+                    str(args.output),
+                    "--shard-rows",
+                    str(args.shard_rows),
+                ]
+                auto_pred_main()
+            finally:
+                sys.argv = old_argv
+
+            review_csv = args.output / "matching" / "manual_label_review.csv"
+            if review_csv.is_file():
+                try:
+                    manual_pred_main(["--output", str(args.output)])
+                except SystemExit:
+                    pass
+            try:
+                train_main(["--output", str(args.output)])
+                promote_main(["--output", str(args.output)])
+            except SystemExit as exc:
+                print(f"[Matching notice] Supervised model step skipped or exited: {exc}")
     finally:
         if client is not None:
             client.close()

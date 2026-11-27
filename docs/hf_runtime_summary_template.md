@@ -17,12 +17,12 @@ python scripts/aggregate_member_metrics.py --metrics-dir data/team_metrics --dat
 The script writes `data/metrics/group_runtime_summary.csv` and `data/metrics/group_runtime_summary.md`. It leaves unavailable metrics blank and labels summed member durations as cumulative processing time rather than group wall time.
 
 | Member | Assigned arXiv range | Run date | Commit | IDs assigned | Papers resolved | Versions downloaded | Extraction completed | Discovery (s) | Download (s) | Extraction (s) | References (s) | End-to-end wall time (s) | Peak RAM (MB) | Average RAM (MB) | Peak working disk (MB) | Final output disk (MB) | Final corpus disk (MB) | Dataset URL |
-|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| Kiệt | 2025-10 #14401–19400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| Dương | 2025-10 #9401–14400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| **Hà** | **2025-10 #4401–9400** |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| Kiên | 2025-09 #26047 to 2025-10 #4400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| Anh | 2025-09 #11047–16046 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Kiệt | 2025-10 #14401–19400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Dương | 2025-10 #9401–14400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| **Hà** | **2025-10 #4401–9400** |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Kiên | 2025-09 #26047 to 2025-10 #4400 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| Anh | 2025-09 #11047–16046 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 
 ## Where to get the measurements
 
