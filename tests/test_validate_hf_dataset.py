@@ -37,7 +37,7 @@ def fake_datasets_lib(monkeypatch):
     """Fake Hugging Face ``datasets`` module reading Parquet shards via PyArrow."""
     calls = []
 
-    def fake_load_dataset(path, name=None, split="train"):
+    def fake_load_dataset(path, name=None, split="train", **kwargs):
         calls.append((path, name, split))
         table_dir = Path(path) / "data" / str(name)
         shards = sorted(table_dir.glob("*.parquet"))
